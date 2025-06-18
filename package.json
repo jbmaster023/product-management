@@ -4,13 +4,10 @@
   "description": "Sistema de gestión de productos y pedidos",
   "main": "index.html",
   "scripts": {
-    "start": "serve -s . -l 3010 --host 0.0.0.0",
+    "start": "http-server . -p 3010 -a 0.0.0.0",
     "build": "echo 'Build completed'"
   },
   "dependencies": {
-    "serve": "^14.2.0"
-  },
-  "engines": {
-    "node": ">=18.0.0"
+    "http-server": "^14.1.1"
   }
 }
