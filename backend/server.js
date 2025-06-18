@@ -1,9 +1,23 @@
-// server.js - Backend Mínimo para Testing
+// server.js - Backend Híbrido: PostgreSQL con Fallback a Memoria
 const express = require('express');
 const cors = require('cors');
+const { Pool } = require('pg');
+const bcrypt = require('bcryptjs');
 
 const app = express();
 const PORT = process.env.PORT || 3053;
+
+// Configuración de PostgreSQL
+const pool = new Pool({
+  host: process.env.DB_HOST || 'localhost',
+  port: process.env.DB_PORT || 5432,
+  database: process.env.DB_NAME || 'product_management',
+  user: process.env.DB_USER || 'admin',
+  password: process.env.DB_PASSWORD || 'password',
+});
+
+// Variable para saber si PostgreSQL está disponible
+let dbConnected = false;
 
 // Middleware básico
 app.use(cors({
@@ -12,8 +26,8 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Logging middleware
 app.use((req, res, next) => {
@@ -21,8 +35,8 @@ app.use((req, res, next) => {
   next();
 });
 
-// Datos temporales en memoria (para testing)
-let products = [
+// Datos de fallback en memoria
+let memoryProducts = [
   {
     id: 1,
     name: 'Laptop Dell XPS 13',
@@ -55,7 +69,7 @@ let products = [
   }
 ];
 
-let orders = [
+let memoryOrders = [
   {
     id: 1001,
     customer_name: 'Juan Pérez',
@@ -76,51 +90,182 @@ let orders = [
   }
 ];
 
-// Usuario hardcodeado para testing
-const adminUser = {
-  id: 1,
-  username: 'admin',
-  password: 'admin123', // En producción usar hash
-  role: 'admin'
-};
+// Test de conexión a PostgreSQL
+async function testDatabaseConnection() {
+  try {
+    console.log('🔄 Testing PostgreSQL connection...');
+    const client = await pool.connect();
+    const result = await client.query('SELECT NOW()');
+    client.release();
+    dbConnected = true;
+    console.log('✅ PostgreSQL connected successfully:', result.rows[0].now);
+    return true;
+  } catch (error) {
+    dbConnected = false;
+    console.log('❌ PostgreSQL not available, using memory fallback:', error.message);
+    return false;
+  }
+}
+
+// Inicializar base de datos PostgreSQL
+async function initDatabase() {
+  if (!dbConnected) return;
+  
+  try {
+    console.log('🔄 Initializing PostgreSQL database...');
+    
+    // Crear tablas
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(100) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        role VARCHAR(50) DEFAULT 'admin',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS products (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        price DECIMAL(10,2) NOT NULL,
+        stock INTEGER NOT NULL,
+        branch VARCHAR(100) NOT NULL,
+        images JSONB DEFAULT '[]',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS orders (
+        id SERIAL PRIMARY KEY,
+        customer_name VARCHAR(255) NOT NULL,
+        products JSONB NOT NULL,
+        address TEXT NOT NULL,
+        total DECIMAL(10,2) NOT NULL,
+        status VARCHAR(50) DEFAULT 'pending',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Crear usuario admin
+    const adminExists = await pool.query('SELECT id FROM users WHERE username = $1', ['admin']);
+    if (adminExists.rows.length === 0) {
+      const hashedPassword = await bcrypt.hash('admin123', 10);
+      await pool.query(
+        'INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)',
+        ['admin', hashedPassword, 'admin']
+      );
+      console.log('✅ Admin user created in PostgreSQL');
+    }
+
+    // Migrar datos de memoria a PostgreSQL si están vacías las tablas
+    const productsCount = await pool.query('SELECT COUNT(*) FROM products');
+    if (parseInt(productsCount.rows[0].count) === 0) {
+      console.log('📦 Migrating memory data to PostgreSQL...');
+      
+      for (const product of memoryProducts) {
+        await pool.query(
+          'INSERT INTO products (name, description, price, stock, branch, images) VALUES ($1, $2, $3, $4, $5, $6)',
+          [product.name, product.description, product.price, product.stock, product.branch, product.images]
+        );
+      }
+      
+      for (const order of memoryOrders) {
+        await pool.query(
+          'INSERT INTO orders (customer_name, products, address, total, status) VALUES ($1, $2, $3, $4, $5)',
+          [order.customer_name, order.products, order.address, order.total, order.status]
+        );
+      }
+      
+      console.log('✅ Data migration completed');
+    }
+
+    console.log('🎉 PostgreSQL database initialized successfully');
+  } catch (error) {
+    console.error('❌ Error initializing PostgreSQL:', error);
+    dbConnected = false;
+  }
+}
 
 // Rutas de salud
-app.get('/api/health', (req, res) => {
-  console.log('Health check requested');
+app.get('/api/health', async (req, res) => {
+  const dbStatus = dbConnected ? 'PostgreSQL Connected' : 'In-Memory Fallback';
+  
+  let dbTime = null;
+  if (dbConnected) {
+    try {
+      const result = await pool.query('SELECT NOW()');
+      dbTime = result.rows[0].now;
+    } catch (error) {
+      dbConnected = false;
+    }
+  }
+  
   res.json({ 
     status: 'OK', 
     timestamp: new Date().toISOString(),
-    database: 'In-Memory (Testing)',
+    database: dbStatus,
+    dbTime: dbTime,
     message: 'Backend funcionando correctamente'
   });
 });
 
-// Login simplificado
-app.post('/api/auth/login', (req, res) => {
+// Rutas de autenticación
+app.post('/api/auth/login', async (req, res) => {
   console.log('Login attempt:', req.body);
   
   try {
     const { username, password } = req.body;
     
     if (!username || !password) {
-      console.log('Missing credentials');
       return res.status(400).json({ error: 'Usuario y contraseña requeridos' });
     }
     
-    // Verificación simple (sin bcrypt para testing)
-    if (username === adminUser.username && password === adminUser.password) {
-      console.log('✅ LOGIN SUCCESSFUL');
+    if (dbConnected) {
+      // Login con PostgreSQL
+      const user = await pool.query(
+        'SELECT id, username, password_hash, role FROM users WHERE username = $1',
+        [username]
+      );
+
+      if (user.rows.length === 0) {
+        return res.status(401).json({ error: 'Credenciales incorrectas' });
+      }
+
+      const validPassword = await bcrypt.compare(password, user.rows[0].password_hash);
+      if (!validPassword) {
+        return res.status(401).json({ error: 'Credenciales incorrectas' });
+      }
+
+      console.log('✅ PostgreSQL login successful');
       res.json({
         success: true,
         user: {
-          id: adminUser.id,
-          username: adminUser.username,
-          role: adminUser.role
+          id: user.rows[0].id,
+          username: user.rows[0].username,
+          role: user.rows[0].role
         }
       });
     } else {
-      console.log('❌ Invalid credentials');
-      res.status(401).json({ error: 'Credenciales incorrectas' });
+      // Fallback login (memoria)
+      if (username === 'admin' && password === 'admin123') {
+        console.log('✅ Memory fallback login successful');
+        res.json({
+          success: true,
+          user: {
+            id: 1,
+            username: 'admin',
+            role: 'admin'
+          }
+        });
+      } else {
+        res.status(401).json({ error: 'Credenciales incorrectas' });
+      }
     }
   } catch (error) {
     console.error('Login error:', error);
@@ -128,104 +273,211 @@ app.post('/api/auth/login', (req, res) => {
   }
 });
 
-// Productos
-app.get('/api/products', (req, res) => {
-  console.log('Products requested');
-  res.json(products);
-});
-
-app.post('/api/products', (req, res) => {
-  console.log('Creating product:', req.body);
-  
-  const { name, description, price, stock, branch, images = [] } = req.body;
-  
-  if (!name || !price || !stock || !branch) {
-    return res.status(400).json({ error: 'Campos requeridos: name, price, stock, branch' });
+// Rutas de productos
+app.get('/api/products', async (req, res) => {
+  try {
+    if (dbConnected) {
+      const result = await pool.query('SELECT * FROM products ORDER BY created_at DESC');
+      res.json(result.rows);
+    } else {
+      res.json(memoryProducts);
+    }
+  } catch (error) {
+    console.error('Error getting products:', error);
+    res.json(memoryProducts); // Fallback
   }
-
-  const newProduct = {
-    id: Date.now(),
-    name,
-    description,
-    price: parseFloat(price),
-    stock: parseInt(stock),
-    branch,
-    images: JSON.stringify(images),
-    created_at: new Date().toISOString()
-  };
-  
-  products.push(newProduct);
-  res.json(newProduct);
 });
 
-app.put('/api/products/:id', (req, res) => {
-  const { id } = req.params;
-  const { name, description, price, stock, branch, images = [] } = req.body;
-  
-  const productIndex = products.findIndex(p => p.id == id);
-  
-  if (productIndex === -1) {
-    return res.status(404).json({ error: 'Producto no encontrado' });
+app.post('/api/products', async (req, res) => {
+  try {
+    const { name, description, price, stock, branch, images = [] } = req.body;
+    
+    if (!name || !price || !stock || !branch) {
+      return res.status(400).json({ error: 'Campos requeridos: name, price, stock, branch' });
+    }
+
+    if (dbConnected) {
+      const result = await pool.query(
+        'INSERT INTO products (name, description, price, stock, branch, images) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
+        [name, description, parseFloat(price), parseInt(stock), branch, JSON.stringify(images)]
+      );
+      res.json(result.rows[0]);
+    } else {
+      const newProduct = {
+        id: Date.now(),
+        name,
+        description,
+        price: parseFloat(price),
+        stock: parseInt(stock),
+        branch,
+        images: JSON.stringify(images),
+        created_at: new Date().toISOString()
+      };
+      memoryProducts.push(newProduct);
+      res.json(newProduct);
+    }
+  } catch (error) {
+    console.error('Error creating product:', error);
+    res.status(500).json({ error: 'Error creando producto' });
   }
-  
-  products[productIndex] = {
-    ...products[productIndex],
-    name,
-    description,
-    price: parseFloat(price),
-    stock: parseInt(stock),
-    branch,
-    images: JSON.stringify(images)
-  };
-  
-  res.json(products[productIndex]);
 });
 
-app.delete('/api/products/:id', (req, res) => {
-  const { id } = req.params;
-  
-  const productIndex = products.findIndex(p => p.id == id);
-  
-  if (productIndex === -1) {
-    return res.status(404).json({ error: 'Producto no encontrado' });
+app.put('/api/products/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, description, price, stock, branch, images = [] } = req.body;
+    
+    if (dbConnected) {
+      const result = await pool.query(
+        'UPDATE products SET name = $1, description = $2, price = $3, stock = $4, branch = $5, images = $6, updated_at = CURRENT_TIMESTAMP WHERE id = $7 RETURNING *',
+        [name, description, parseFloat(price), parseInt(stock), branch, JSON.stringify(images), id]
+      );
+      
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Producto no encontrado' });
+      }
+      res.json(result.rows[0]);
+    } else {
+      const productIndex = memoryProducts.findIndex(p => p.id == id);
+      if (productIndex === -1) {
+        return res.status(404).json({ error: 'Producto no encontrado' });
+      }
+      
+      memoryProducts[productIndex] = {
+        ...memoryProducts[productIndex],
+        name,
+        description,
+        price: parseFloat(price),
+        stock: parseInt(stock),
+        branch,
+        images: JSON.stringify(images)
+      };
+      res.json(memoryProducts[productIndex]);
+    }
+  } catch (error) {
+    console.error('Error updating product:', error);
+    res.status(500).json({ error: 'Error actualizando producto' });
   }
-  
-  products.splice(productIndex, 1);
-  res.json({ success: true, message: 'Producto eliminado correctamente' });
 });
 
-// Pedidos
-app.get('/api/orders', (req, res) => {
-  console.log('Orders requested');
-  res.json(orders);
+app.delete('/api/products/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    if (dbConnected) {
+      const result = await pool.query('DELETE FROM products WHERE id = $1 RETURNING *', [id]);
+      if (result.rows.length === 0) {
+        return res.status(404).json({ error: 'Producto no encontrado' });
+      }
+    } else {
+      const productIndex = memoryProducts.findIndex(p => p.id == id);
+      if (productIndex === -1) {
+        return res.status(404).json({ error: 'Producto no encontrado' });
+      }
+      memoryProducts.splice(productIndex, 1);
+    }
+    
+    res.json({ success: true, message: 'Producto eliminado correctamente' });
+  } catch (error) {
+    console.error('Error deleting product:', error);
+    res.status(500).json({ error: 'Error eliminando producto' });
+  }
 });
 
-// Estadísticas
-app.get('/api/stats', (req, res) => {
-  console.log('Stats requested');
-  
-  const totalProducts = products.length;
-  const totalValue = products.reduce((sum, product) => sum + (product.price * product.stock), 0);
-  const totalOrders = orders.length;
-  const totalSales = orders.reduce((sum, order) => sum + order.total, 0);
-  
-  res.json({
-    totalProducts,
-    totalValue,
-    totalOrders,
-    totalSales
-  });
+// Rutas de pedidos
+app.get('/api/orders', async (req, res) => {
+  try {
+    if (dbConnected) {
+      const result = await pool.query('SELECT * FROM orders ORDER BY created_at DESC');
+      res.json(result.rows);
+    } else {
+      res.json(memoryOrders);
+    }
+  } catch (error) {
+    console.error('Error getting orders:', error);
+    res.json(memoryOrders);
+  }
+});
+
+app.post('/api/orders', async (req, res) => {
+  try {
+    const { customer_name, products, address, total, status = 'pending' } = req.body;
+    
+    if (dbConnected) {
+      const result = await pool.query(
+        'INSERT INTO orders (customer_name, products, address, total, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+        [customer_name, JSON.stringify(products), address, parseFloat(total), status]
+      );
+      res.json(result.rows[0]);
+    } else {
+      const newOrder = {
+        id: Date.now(),
+        customer_name,
+        products: JSON.stringify(products),
+        address,
+        total: parseFloat(total),
+        status,
+        created_at: new Date().toISOString()
+      };
+      memoryOrders.push(newOrder);
+      res.json(newOrder);
+    }
+  } catch (error) {
+    console.error('Error creating order:', error);
+    res.status(500).json({ error: 'Error creando pedido' });
+  }
+});
+
+// Ruta de estadísticas
+app.get('/api/stats', async (req, res) => {
+  try {
+    if (dbConnected) {
+      const [productsCount, productsValue, ordersCount, salesTotal] = await Promise.all([
+        pool.query('SELECT COUNT(*) FROM products'),
+        pool.query('SELECT COALESCE(SUM(price * stock), 0) as total_value FROM products'),
+        pool.query('SELECT COUNT(*) FROM orders'),
+        pool.query('SELECT COALESCE(SUM(total), 0) as total_sales FROM orders')
+      ]);
+
+      res.json({
+        totalProducts: parseInt(productsCount.rows[0].count),
+        totalValue: parseFloat(productsValue.rows[0].total_value || 0),
+        totalOrders: parseInt(ordersCount.rows[0].count),
+        totalSales: parseFloat(salesTotal.rows[0].total_sales || 0)
+      });
+    } else {
+      const totalProducts = memoryProducts.length;
+      const totalValue = memoryProducts.reduce((sum, product) => sum + (product.price * product.stock), 0);
+      const totalOrders = memoryOrders.length;
+      const totalSales = memoryOrders.reduce((sum, order) => sum + order.total, 0);
+      
+      res.json({
+        totalProducts,
+        totalValue,
+        totalOrders,
+        totalSales
+      });
+    }
+  } catch (error) {
+    console.error('Error getting stats:', error);
+    res.status(500).json({ error: 'Error obteniendo estadísticas' });
+  }
 });
 
 // Ruta raíz
 app.get('/', (req, res) => {
   res.json({ 
-    message: 'API del Sistema de Gestión de Productos - Versión de Testing',
+    message: 'API del Sistema de Gestión de Productos',
+    database: dbConnected ? 'PostgreSQL' : 'In-Memory',
     endpoints: [
       'GET /api/health',
       'POST /api/auth/login',
       'GET /api/products',
+      'POST /api/products',
+      'PUT /api/products/:id',
+      'DELETE /api/products/:id',
       'GET /api/orders',
+      'POST /api/orders',
       'GET /api/stats'
     ]
   });
@@ -239,23 +491,41 @@ app.use((err, req, res, next) => {
 
 // Ruta 404
 app.use('*', (req, res) => {
-  console.log('404 - Route not found:', req.originalUrl);
   res.status(404).json({ error: 'Ruta no encontrada' });
 });
 
 // Inicializar servidor
-app.listen(PORT, '0.0.0.0', () => {
-  console.log('=================================');
-  console.log('🚀 BACKEND MÍNIMO INICIADO');
-  console.log(`🌐 Puerto: ${PORT}`);
-  console.log(`📍 API: http://localhost:${PORT}/api`);
-  console.log(`🔐 Login: admin / admin123`);
-  console.log(`💾 Datos: En memoria (testing)`);
-  console.log('=================================');
-});
+async function startServer() {
+  try {
+    // Test de conexión a PostgreSQL
+    await testDatabaseConnection();
+    
+    if (dbConnected) {
+      await initDatabase();
+    }
+    
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log('=================================');
+      console.log('🚀 BACKEND HÍBRIDO INICIADO');
+      console.log(`🌐 Puerto: ${PORT}`);
+      console.log(`📍 API: http://localhost:${PORT}/api`);
+      console.log(`🗄️ Base de datos: ${dbConnected ? 'PostgreSQL' : 'In-Memory'}`);
+      console.log(`🔐 Login: admin / admin123`);
+      console.log('=================================');
+    });
+  } catch (error) {
+    console.error('❌ Error starting server:', error);
+    process.exit(1);
+  }
+}
 
 // Manejo de cierre
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log('🛑 Cerrando servidor...');
+  if (dbConnected) {
+    await pool.end();
+  }
   process.exit(0);
 });
+
+startServer().catch(console.error);
