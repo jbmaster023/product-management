@@ -276,11 +276,28 @@ app.post('/api/auth/login', async (req, res) => {
 // Rutas de productos
 app.get('/api/products', async (req, res) => {
   try {
+    const search = req.query.search || '';
     if (dbConnected) {
-      const result = await pool.query('SELECT * FROM products ORDER BY created_at DESC');
-      res.json(result.rows);
+      if (search) {
+        const result = await pool.query(
+          'SELECT * FROM products WHERE name ILIKE $1 OR description ILIKE $1 ORDER BY created_at DESC',
+          [`%${search}%`]
+        );
+        res.json(result.rows);
+      } else {
+        const result = await pool.query('SELECT * FROM products ORDER BY created_at DESC');
+        res.json(result.rows);
+      }
     } else {
-      res.json(memoryProducts);
+      let products = memoryProducts;
+      if (search) {
+        const term = search.toLowerCase();
+        products = products.filter(p =>
+          p.name.toLowerCase().includes(term) ||
+          (p.description && p.description.toLowerCase().includes(term))
+        );
+      }
+      res.json(products);
     }
   } catch (error) {
     console.error('Error getting products:', error);
