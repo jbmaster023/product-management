@@ -573,9 +573,12 @@
                     <div class="card">
                         <div class="card-header">
                             <h3>Gestión de Productos</h3>
-                            <button onclick="showProductModal()" class="btn btn-primary">
-                                <i class="fas fa-plus"></i> Nuevo Producto
-                            </button>
+                            <div style="display: flex; gap: 10px; align-items: center;">
+                                <input type="text" id="productSearch" class="form-control" placeholder="Buscar..." oninput="onProductSearch()" style="max-width: 200px;">
+                                <button onclick="showProductModal()" class="btn btn-primary">
+                                    <i class="fas fa-plus"></i> Nuevo Producto
+                                </button>
+                            </div>
                         </div>
                         <div class="card-body">
                             <div class="table-container">
@@ -831,9 +834,10 @@
             }
         }
 
-        async function loadProducts() {
+        async function loadProducts(search = '') {
             try {
-                products = await apiCall('/products');
+                const query = search ? `?search=${encodeURIComponent(search)}` : '';
+                products = await apiCall(`/products${query}`);
                 renderProducts();
             } catch (error) {
                 console.error('Error loading products:', error);
@@ -1013,7 +1017,7 @@
             }
         }
 
-        async function deleteProduct(id) {
+async function deleteProduct(id) {
             if (confirm('¿Estás seguro de que quieres eliminar este producto?')) {
                 try {
                     await apiCall(`/products/${id}`, {
@@ -1025,9 +1029,14 @@
                     alert('Error eliminando producto');
                 }
             }
-        }
+}
 
-        // Render Functions
+function onProductSearch() {
+    const term = document.getElementById('productSearch').value;
+    loadProducts(term);
+}
+
+// Render Functions
         // Función renderProducts() mejorada con mejor manejo de errores
 function renderProducts() {
     const tbody = document.getElementById('productsTable');
@@ -1135,11 +1144,12 @@ function renderProducts() {
 }
 
 // Función loadProducts() mejorada con mejor debugging
-async function loadProducts() {
+async function loadProducts(search = '') {
     try {
         console.log('🔄 Loading products from API...');
-        
-        const response = await fetch(`${API_BASE_URL}/products`);
+
+        const query = search ? `?search=${encodeURIComponent(search)}` : '';
+        const response = await fetch(`${API_BASE_URL}/products${query}`);
         
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
