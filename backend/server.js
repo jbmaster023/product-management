@@ -1,442 +1,267 @@
-// server.js - Backend API Simplificado (sin multer por ahora)
+// server.js - Backend Mínimo para Testing
 const express = require('express');
 const cors = require('cors');
-const { Pool } = require('pg');
-const bcrypt = require('bcryptjs');
-const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3053;
 
-// Middleware
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-app.use(express.static('public'));
+// Middleware básico
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 
-// Configuración de PostgreSQL
-const pool = new Pool({
-  host: process.env.DB_HOST || 'localhost',
-  port: process.env.DB_PORT || 5432,
-  database: process.env.DB_NAME || 'product_management',
-  user: process.env.DB_USER || 'admin',
-  password: process.env.DB_PASSWORD || 'password',
-});
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// Test de conexión a la base de datos
-pool.on('connect', () => {
-  console.log('✅ Conectado a PostgreSQL');
-});
-
-pool.on('error', (err) => {
-  console.error('❌ Error de conexión a PostgreSQL:', err);
-});
-
-// Función mejorada para inicializar la base de datos
-async function initDatabase() {
-  try {
-    console.log('🔄 Inicializando base de datos...');
-    
-    // Test de conexión
-    const testConnection = await pool.query('SELECT NOW()');
-    console.log('✅ Conexión a PostgreSQL exitosa:', testConnection.rows[0].now);
-    
-    // Crear tablas
-    console.log('📋 Creando tablas...');
-    
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        username VARCHAR(100) UNIQUE NOT NULL,
-        password_hash VARCHAR(255) NOT NULL,
-        role VARCHAR(50) DEFAULT 'admin',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    console.log('✅ Tabla users creada');
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS products (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        description TEXT,
-        price DECIMAL(10,2) NOT NULL,
-        stock INTEGER NOT NULL,
-        branch VARCHAR(100) NOT NULL,
-        images JSONB DEFAULT '[]',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    console.log('✅ Tabla products creada');
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS orders (
-        id SERIAL PRIMARY KEY,
-        customer_name VARCHAR(255) NOT NULL,
-        products JSONB NOT NULL,
-        address TEXT NOT NULL,
-        total DECIMAL(10,2) NOT NULL,
-        status VARCHAR(50) DEFAULT 'pending',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-    console.log('✅ Tabla orders creada');
-
-    // Verificar si el usuario admin existe
-    console.log('👤 Verificando usuario admin...');
-    const adminExists = await pool.query('SELECT id, username FROM users WHERE username = $1', ['admin']);
-    console.log(`📊 Usuarios encontrados: ${adminExists.rows.length}`);
-    
-    if (adminExists.rows.length === 0) {
-      console.log('➕ Creando usuario admin...');
-      const hashedPassword = await bcrypt.hash('admin123', 10);
-      console.log('🔐 Contraseña hasheada generada');
-      
-      const newUser = await pool.query(
-        'INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3) RETURNING id, username',
-        ['admin', hashedPassword, 'admin']
-      );
-      console.log('✅ Usuario admin creado exitosamente:', newUser.rows[0]);
-    } else {
-      console.log('✅ Usuario admin ya existe:', adminExists.rows[0]);
-      
-      // Opcional: Actualizar contraseña si es necesario
-      console.log('🔄 Actualizando contraseña del admin...');
-      const hashedPassword = await bcrypt.hash('admin123', 10);
-      await pool.query(
-        'UPDATE users SET password_hash = $1 WHERE username = $2',
-        [hashedPassword, 'admin']
-      );
-      console.log('✅ Contraseña del admin actualizada');
-    }
-
-    // Verificar usuarios finales
-    const allUsers = await pool.query('SELECT id, username, role, created_at FROM users');
-    console.log('👥 Usuarios en la base de datos:', allUsers.rows);
-
-    // Insertar datos de ejemplo si no existen
-    const productsExist = await pool.query('SELECT COUNT(*) FROM products');
-    console.log(`📦 Productos existentes: ${productsExist.rows[0].count}`);
-    
-    if (parseInt(productsExist.rows[0].count) === 0) {
-      console.log('➕ Insertando productos de ejemplo...');
-      await pool.query(`
-        INSERT INTO products (name, description, price, stock, branch, images) VALUES
-        ('Laptop Dell XPS 13', 'Laptop ultrabook con procesador Intel Core i7', 1299.99, 15, 'Principal', '[]'),
-        ('iPhone 15 Pro', 'Smartphone Apple con chip A17 Pro', 999.99, 25, 'Norte', '[]'),
-        ('Samsung Galaxy S24', 'Smartphone Android con cámara de 200MP', 899.99, 30, 'Sur', '[]'),
-        ('MacBook Air M3', 'Laptop Apple con chip M3', 1199.99, 12, 'Principal', '[]'),
-        ('Google Pixel 8', 'Smartphone Google con IA avanzada', 699.99, 18, 'Este', '[]')
-      `);
-      console.log('✅ Productos de ejemplo insertados');
-
-      console.log('➕ Insertando pedidos de ejemplo...');
-      await pool.query(`
-        INSERT INTO orders (customer_name, products, address, total, status) VALUES
-        ('Juan Pérez', '[{"name": "Laptop Dell XPS 13", "quantity": 1, "price": 1299.99}]', 'Calle Principal 123, Santo Domingo', 1299.99, 'pending'),
-        ('María González', '[{"name": "iPhone 15 Pro", "quantity": 2, "price": 999.99}]', 'Av. Independencia 456, Santo Domingo Este', 1999.98, 'completed'),
-        ('Carlos Rodríguez', '[{"name": "Samsung Galaxy S24", "quantity": 1, "price": 899.99}, {"name": "iPhone 15 Pro", "quantity": 1, "price": 999.99}]', 'Calle Mella 789, Santiago', 1899.98, 'processing'),
-        ('Ana Martín', '[{"name": "MacBook Air M3", "quantity": 1, "price": 1199.99}]', 'Plaza Central 456, La Vega', 1199.99, 'pending')
-      `);
-      console.log('✅ Pedidos de ejemplo insertados');
-    }
-
-    console.log('🎉 Base de datos inicializada correctamente');
-    
-    // Verificación final
-    const finalStats = await pool.query(`
-      SELECT 
-        (SELECT COUNT(*) FROM users) as usuarios,
-        (SELECT COUNT(*) FROM products) as productos,
-        (SELECT COUNT(*) FROM orders) as pedidos
-    `);
-    console.log('📊 Estadísticas finales:', finalStats.rows[0]);
-    
-  } catch (error) {
-    console.error('❌ Error inicializando base de datos:', error);
-    console.error('📍 Stack trace:', error.stack);
-    throw error;
-  }
-}
-
-// Middleware de logging
+// Logging middleware
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
   next();
 });
 
+// Datos temporales en memoria (para testing)
+let products = [
+  {
+    id: 1,
+    name: 'Laptop Dell XPS 13',
+    description: 'Laptop ultrabook con procesador Intel Core i7',
+    price: 1299.99,
+    stock: 15,
+    branch: 'Principal',
+    images: '[]',
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 2,
+    name: 'iPhone 15 Pro',
+    description: 'Smartphone Apple con chip A17 Pro',
+    price: 999.99,
+    stock: 25,
+    branch: 'Norte',
+    images: '[]',
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 3,
+    name: 'Samsung Galaxy S24',
+    description: 'Smartphone Android con cámara de 200MP',
+    price: 899.99,
+    stock: 30,
+    branch: 'Sur',
+    images: '[]',
+    created_at: new Date().toISOString()
+  }
+];
+
+let orders = [
+  {
+    id: 1001,
+    customer_name: 'Juan Pérez',
+    products: '[{"name": "Laptop Dell XPS 13", "quantity": 1, "price": 1299.99}]',
+    address: 'Calle Principal 123, Santo Domingo',
+    total: 1299.99,
+    status: 'pending',
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 1002,
+    customer_name: 'María González',
+    products: '[{"name": "iPhone 15 Pro", "quantity": 2, "price": 999.99}]',
+    address: 'Av. Independencia 456, Santo Domingo Este',
+    total: 1999.98,
+    status: 'completed',
+    created_at: new Date().toISOString()
+  }
+];
+
+// Usuario hardcodeado para testing
+const adminUser = {
+  id: 1,
+  username: 'admin',
+  password: 'admin123', // En producción usar hash
+  role: 'admin'
+};
+
 // Rutas de salud
-app.get('/api/health', async (req, res) => {
-  try {
-    const dbCheck = await pool.query('SELECT NOW()');
-    res.json({ 
-      status: 'OK', 
-      timestamp: new Date().toISOString(),
-      database: 'Connected',
-      dbTime: dbCheck.rows[0].now
-    });
-  } catch (error) {
-    res.status(500).json({
-      status: 'ERROR',
-      timestamp: new Date().toISOString(),
-      database: 'Disconnected',
-      error: error.message
-    });
-  }
+app.get('/api/health', (req, res) => {
+  console.log('Health check requested');
+  res.json({ 
+    status: 'OK', 
+    timestamp: new Date().toISOString(),
+    database: 'In-Memory (Testing)',
+    message: 'Backend funcionando correctamente'
+  });
 });
 
-// Rutas de autenticación
-app.post('/api/auth/login', async (req, res) => {
-  try {
-    const { username, password } = req.body;
-    
-    if (!username || !password) {
-      return res.status(400).json({ error: 'Usuario y contraseña requeridos' });
-    }
-    
-    const user = await pool.query(
-      'SELECT id, username, password_hash, role FROM users WHERE username = $1',
-      [username]
-    );
-
-    if (user.rows.length === 0) {
-      return res.status(401).json({ error: 'Credenciales incorrectas' });
-    }
-
-    const validPassword = await bcrypt.compare(password, user.rows[0].password_hash);
-    if (!validPassword) {
-      return res.status(401).json({ error: 'Credenciales incorrectas' });
-    }
-
-    res.json({
-      success: true,
-      user: {
-        id: user.rows[0].id,
-        username: user.rows[0].username,
-        role: user.rows[0].role
-      }
-    });
-  } catch (error) {
-    console.error('Error en login:', error);
-    res.status(500).json({ error: 'Error interno del servidor' });
-  }
-});
-
-// Rutas de productos
-app.get('/api/products', async (req, res) => {
-  try {
-    const result = await pool.query(
-      'SELECT * FROM products ORDER BY created_at DESC'
-    );
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error obteniendo productos:', error);
-    res.status(500).json({ error: 'Error obteniendo productos' });
-  }
-});
-
-app.post('/api/products', async (req, res) => {
-  try {
-    const { name, description, price, stock, branch, images = [] } = req.body;
-    
-    if (!name || !price || !stock || !branch) {
-      return res.status(400).json({ error: 'Campos requeridos: name, price, stock, branch' });
-    }
-
-    const result = await pool.query(
-      'INSERT INTO products (name, description, price, stock, branch, images) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-      [name, description, parseFloat(price), parseInt(stock), branch, JSON.stringify(images)]
-    );
-
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error('Error creando producto:', error);
-    res.status(500).json({ error: 'Error creando producto' });
-  }
-});
-
-app.put('/api/products/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { name, description, price, stock, branch, images = [] } = req.body;
-    
-    if (!name || !price || !stock || !branch) {
-      return res.status(400).json({ error: 'Campos requeridos: name, price, stock, branch' });
-    }
-
-    const result = await pool.query(
-      'UPDATE products SET name = $1, description = $2, price = $3, stock = $4, branch = $5, images = $6, updated_at = CURRENT_TIMESTAMP WHERE id = $7 RETURNING *',
-      [name, description, parseFloat(price), parseInt(stock), branch, JSON.stringify(images), id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Producto no encontrado' });
-    }
-
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error('Error actualizando producto:', error);
-    res.status(500).json({ error: 'Error actualizando producto' });
-  }
-});
-
-app.delete('/api/products/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    const result = await pool.query('DELETE FROM products WHERE id = $1 RETURNING *', [id]);
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Producto no encontrado' });
-    }
-
-    res.json({ success: true, message: 'Producto eliminado correctamente' });
-  } catch (error) {
-    console.error('Error eliminando producto:', error);
-    res.status(500).json({ error: 'Error eliminando producto' });
-  }
-});
-
-// Rutas de pedidos
-app.get('/api/orders', async (req, res) => {
-  try {
-    const result = await pool.query(
-      'SELECT * FROM orders ORDER BY created_at DESC'
-    );
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error obteniendo pedidos:', error);
-    res.status(500).json({ error: 'Error obteniendo pedidos' });
-  }
-});
-
-app.post('/api/orders', async (req, res) => {
-  try {
-    const { customer_name, products, address, total, status = 'pending' } = req.body;
-    
-    if (!customer_name || !products || !address || !total) {
-      return res.status(400).json({ error: 'Campos requeridos: customer_name, products, address, total' });
-    }
-    
-    const result = await pool.query(
-      'INSERT INTO orders (customer_name, products, address, total, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [customer_name, JSON.stringify(products), address, parseFloat(total), status]
-    );
-
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error('Error creando pedido:', error);
-    res.status(500).json({ error: 'Error creando pedido' });
-  }
-});
-
-app.put('/api/orders/:id/status', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body;
-    
-    if (!status) {
-      return res.status(400).json({ error: 'Status requerido' });
-    }
-    
-    const result = await pool.query(
-      'UPDATE orders SET status = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *',
-      [status, id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Pedido no encontrado' });
-    }
-
-    res.json(result.rows[0]);
-  } catch (error) {
-    console.error('Error actualizando estado del pedido:', error);
-    res.status(500).json({ error: 'Error actualizando estado del pedido' });
-  }
-});
-
-// Ruta de estadísticas
-app.get('/api/stats', async (req, res) => {
-  try {
-    const [productsCount, productsValue, ordersCount, salesTotal] = await Promise.all([
-      pool.query('SELECT COUNT(*) FROM products'),
-      pool.query('SELECT COALESCE(SUM(price * stock), 0) as total_value FROM products'),
-      pool.query('SELECT COUNT(*) FROM orders'),
-      pool.query('SELECT COALESCE(SUM(total), 0) as total_sales FROM orders')
-    ]);
-
-    res.json({
-      totalProducts: parseInt(productsCount.rows[0].count),
-      totalValue: parseFloat(productsValue.rows[0].total_value || 0),
-      totalOrders: parseInt(ordersCount.rows[0].count),
-      totalSales: parseFloat(salesTotal.rows[0].total_sales || 0)
-    });
-  } catch (error) {
-    console.error('Error obteniendo estadísticas:', error);
-    res.status(500).json({ error: 'Error obteniendo estadísticas' });
-  }
-});
-
-// Servir archivos estáticos (el frontend)
+// Ruta raíz
 app.get('/', (req, res) => {
   res.json({ 
-    message: 'API del Sistema de Gestión de Productos',
+    message: 'API del Sistema de Gestión de Productos - Versión de Testing',
     endpoints: [
       'GET /api/health',
       'POST /api/auth/login',
       'GET /api/products',
-      'POST /api/products',
-      'PUT /api/products/:id',
-      'DELETE /api/products/:id',
       'GET /api/orders',
-      'POST /api/orders',
-      'PUT /api/orders/:id/status',
       'GET /api/stats'
-    ]
+    ],
+    note: 'Esta es una versión simplificada para testing'
+  });
+});
+
+// Login simplificado
+app.post('/api/auth/login', (req, res) => {
+  console.log('Login attempt:', req.body);
+  
+  try {
+    const { username, password } = req.body;
+    
+    if (!username || !password) {
+      console.log('Missing credentials');
+      return res.status(400).json({ error: 'Usuario y contraseña requeridos' });
+    }
+    
+    // Verificación simple (sin bcrypt para testing)
+    if (username === adminUser.username && password === adminUser.password) {
+      console.log('Login successful');
+      res.json({
+        success: true,
+        user: {
+          id: adminUser.id,
+          username: adminUser.username,
+          role: adminUser.role
+        }
+      });
+    } else {
+      console.log('Invalid credentials');
+      res.status(401).json({ error: 'Credenciales incorrectas' });
+    }
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Error interno del servidor' });
+  }
+});
+
+// Productos
+app.get('/api/products', (req, res) => {
+  console.log('Products requested');
+  res.json(products);
+});
+
+app.post('/api/products', (req, res) => {
+  console.log('Creating product:', req.body);
+  
+  const { name, description, price, stock, branch, images = [] } = req.body;
+  
+  if (!name || !price || !stock || !branch) {
+    return res.status(400).json({ error: 'Campos requeridos: name, price, stock, branch' });
+  }
+
+  const newProduct = {
+    id: Date.now(),
+    name,
+    description,
+    price: parseFloat(price),
+    stock: parseInt(stock),
+    branch,
+    images: JSON.stringify(images),
+    created_at: new Date().toISOString()
+  };
+  
+  products.push(newProduct);
+  res.json(newProduct);
+});
+
+app.put('/api/products/:id', (req, res) => {
+  const { id } = req.params;
+  const { name, description, price, stock, branch, images = [] } = req.body;
+  
+  const productIndex = products.findIndex(p => p.id == id);
+  
+  if (productIndex === -1) {
+    return res.status(404).json({ error: 'Producto no encontrado' });
+  }
+  
+  products[productIndex] = {
+    ...products[productIndex],
+    name,
+    description,
+    price: parseFloat(price),
+    stock: parseInt(stock),
+    branch,
+    images: JSON.stringify(images)
+  };
+  
+  res.json(products[productIndex]);
+});
+
+app.delete('/api/products/:id', (req, res) => {
+  const { id } = req.params;
+  
+  const productIndex = products.findIndex(p => p.id == id);
+  
+  if (productIndex === -1) {
+    return res.status(404).json({ error: 'Producto no encontrado' });
+  }
+  
+  products.splice(productIndex, 1);
+  res.json({ success: true, message: 'Producto eliminado correctamente' });
+});
+
+// Pedidos
+app.get('/api/orders', (req, res) => {
+  console.log('Orders requested');
+  res.json(orders);
+});
+
+// Estadísticas
+app.get('/api/stats', (req, res) => {
+  console.log('Stats requested');
+  
+  const totalProducts = products.length;
+  const totalValue = products.reduce((sum, product) => sum + (product.price * product.stock), 0);
+  const totalOrders = orders.length;
+  const totalSales = orders.reduce((sum, order) => sum + order.total, 0);
+  
+  res.json({
+    totalProducts,
+    totalValue,
+    totalOrders,
+    totalSales
   });
 });
 
 // Manejo de errores
 app.use((err, req, res, next) => {
-  console.error(err.stack);
+  console.error('Error:', err);
   res.status(500).json({ error: 'Error interno del servidor' });
 });
 
 // Ruta 404
 app.use('*', (req, res) => {
+  console.log('404 - Route not found:', req.originalUrl);
   res.status(404).json({ error: 'Ruta no encontrada' });
 });
 
 // Inicializar servidor
-async function startServer() {
-  try {
-    await initDatabase();
-    
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
-      console.log(`🌐 API disponible en: http://localhost:${PORT}/api`);
-      console.log(`🗄️ Base de datos: ${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || 5432}`);
-      console.log(`📋 Health check: http://localhost:${PORT}/api/health`);
-    });
-  } catch (error) {
-    console.error('❌ Error iniciando servidor:', error);
-    process.exit(1);
-  }
-}
+app.listen(PORT, '0.0.0.0', () => {
+  console.log('=================================');
+  console.log('🚀 BACKEND MÍNIMO INICIADO');
+  console.log(`🌐 Puerto: ${PORT}`);
+  console.log(`📍 API: http://localhost:${PORT}/api`);
+  console.log(`🔐 Login: admin / admin123`);
+  console.log(`💾 Datos: En memoria (testing)`);
+  console.log('=================================');
+});
 
-// Manejo de cierre graceful
-process.on('SIGINT', async () => {
+// Manejo de cierre
+process.on('SIGINT', () => {
   console.log('🛑 Cerrando servidor...');
-  await pool.end();
   process.exit(0);
 });
 
-process.on('SIGTERM', async () => {
+process.on('SIGTERM', () => {
   console.log('🛑 Cerrando servidor...');
-  await pool.end();
   process.exit(0);
 });
-
-startServer().catch(console.error);
