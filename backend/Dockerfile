@@ -2,20 +2,15 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Copiar package.json primero
 COPY package.json ./
-
-# Instalar dependencias
 RUN npm install
 
-# Copiar TODOS los archivos
 COPY . .
 
-# Verificar que server.js existe (debugging)
-RUN ls -la /app/
-
-# Exponer puerto
+# Exponer puerto 3053 (no 80)
 EXPOSE 3053
 
-# Comando de inicio
+# Variable de entorno por defecto
+ENV PORT=3053
+
 CMD ["node", "server.js"]
