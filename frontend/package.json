@@ -1,0 +1,10 @@
+{
+  "name": "product-management-frontend",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "serve -s . -l 3052"
+  },
+  "dependencies": {
+    "serve": "^14.2.0"
+  }
+}

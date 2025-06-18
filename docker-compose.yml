@@ -1,20 +1,26 @@
 version: '3.8'
-
 services:
-  app:
-    build: .
+  frontend:
+    build: ./frontend
     ports:
-      - "3000:3000"
+      - "3052:3052"
+    depends_on:
+      - backend
     environment:
-      - NODE_ENV=production
-      - DB_HOST=product-db
+      - API_URL=http://backend:3053
+
+  backend:
+    build: ./backend
+    ports:
+      - "3053:3053"
+    depends_on:
+      - postgres
+    environment:
+      - DB_HOST=postgres
       - DB_PORT=5432
       - DB_NAME=product_management
       - DB_USER=admin
       - DB_PASSWORD=${DB_PASSWORD}
-    depends_on:
-      - postgres
-    restart: unless-stopped
 
   postgres:
     image: postgres:15-alpine
@@ -26,7 +32,6 @@ services:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
-    restart: unless-stopped
 
 volumes:
   postgres_data:
