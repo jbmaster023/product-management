@@ -2,17 +2,13 @@ FROM node:18-alpine
 
 WORKDIR /app
 
-# Copiar package.json
-COPY package*.json ./
+RUN npm install -g serve@14.2.0
 
-# Instalar dependencias (usar install en lugar de ci)
-RUN npm install --only=production
+COPY index.html ./
+COPY package.json ./
 
-# Copiar el código de la aplicación
-COPY . .
+# Cambiar puerto a 8080
+EXPOSE 8080
 
-# Exponer el puerto
-EXPOSE 3000
-
-# Comando para ejecutar la aplicación
-CMD ["npm", "start"]
+# Usar puerto 8080 y bind a todas las interfaces
+CMD ["serve", "-s", ".", "-l", "3010", "--host", "0.0.0.0"]
