@@ -4,9 +4,13 @@
   "description": "Sistema de gestión de productos y pedidos",
   "main": "index.html",
   "scripts": {
-    "start": "serve -s . -l 3000"
+    "start": "serve -s . -l 3000",
+    "build": "echo 'Build completed'"
   },
   "dependencies": {
-    "serve": "^14.0.0"
+    "serve": "^14.2.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
