@@ -95,21 +95,6 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Ruta raíz
-app.get('/', (req, res) => {
-  res.json({ 
-    message: 'API del Sistema de Gestión de Productos - Versión de Testing',
-    endpoints: [
-      'GET /api/health',
-      'POST /api/auth/login',
-      'GET /api/products',
-      'GET /api/orders',
-      'GET /api/stats'
-    ],
-    note: 'Esta es una versión simplificada para testing'
-  });
-});
-
 // Login simplificado
 app.post('/api/auth/login', (req, res) => {
   console.log('Login attempt:', req.body);
@@ -124,7 +109,7 @@ app.post('/api/auth/login', (req, res) => {
     
     // Verificación simple (sin bcrypt para testing)
     if (username === adminUser.username && password === adminUser.password) {
-      console.log('Login successful');
+      console.log('✅ LOGIN SUCCESSFUL');
       res.json({
         success: true,
         user: {
@@ -134,7 +119,7 @@ app.post('/api/auth/login', (req, res) => {
         }
       });
     } else {
-      console.log('Invalid credentials');
+      console.log('❌ Invalid credentials');
       res.status(401).json({ error: 'Credenciales incorrectas' });
     }
   } catch (error) {
@@ -232,6 +217,20 @@ app.get('/api/stats', (req, res) => {
   });
 });
 
+// Ruta raíz
+app.get('/', (req, res) => {
+  res.json({ 
+    message: 'API del Sistema de Gestión de Productos - Versión de Testing',
+    endpoints: [
+      'GET /api/health',
+      'POST /api/auth/login',
+      'GET /api/products',
+      'GET /api/orders',
+      'GET /api/stats'
+    ]
+  });
+});
+
 // Manejo de errores
 app.use((err, req, res, next) => {
   console.error('Error:', err);
@@ -257,11 +256,6 @@ app.listen(PORT, '0.0.0.0', () => {
 
 // Manejo de cierre
 process.on('SIGINT', () => {
-  console.log('🛑 Cerrando servidor...');
-  process.exit(0);
-});
-
-process.on('SIGTERM', () => {
   console.log('🛑 Cerrando servidor...');
   process.exit(0);
 });
