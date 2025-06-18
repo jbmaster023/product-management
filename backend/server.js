@@ -32,10 +32,29 @@ pool.on('error', (err) => {
   console.error('❌ Error de conexión a PostgreSQL:', err);
 });
 
-// Inicializar base de datos
+// Función mejorada para inicializar la base de datos
 async function initDatabase() {
   try {
+    console.log('🔄 Inicializando base de datos...');
+    
+    // Test de conexión
+    const testConnection = await pool.query('SELECT NOW()');
+    console.log('✅ Conexión a PostgreSQL exitosa:', testConnection.rows[0].now);
+    
     // Crear tablas
+    console.log('📋 Creando tablas...');
+    
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(100) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        role VARCHAR(50) DEFAULT 'admin',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('✅ Tabla users creada');
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS products (
         id SERIAL PRIMARY KEY,
@@ -49,6 +68,7 @@ async function initDatabase() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    console.log('✅ Tabla products creada');
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS orders (
@@ -62,31 +82,46 @@ async function initDatabase() {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    console.log('✅ Tabla orders creada');
 
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
-        username VARCHAR(100) UNIQUE NOT NULL,
-        password_hash VARCHAR(255) NOT NULL,
-        role VARCHAR(50) DEFAULT 'admin',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    // Insertar usuario admin por defecto
-    const adminExists = await pool.query('SELECT id FROM users WHERE username = $1', ['admin']);
+    // Verificar si el usuario admin existe
+    console.log('👤 Verificando usuario admin...');
+    const adminExists = await pool.query('SELECT id, username FROM users WHERE username = $1', ['admin']);
+    console.log(`📊 Usuarios encontrados: ${adminExists.rows.length}`);
+    
     if (adminExists.rows.length === 0) {
+      console.log('➕ Creando usuario admin...');
       const hashedPassword = await bcrypt.hash('admin123', 10);
-      await pool.query(
-        'INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)',
+      console.log('🔐 Contraseña hasheada generada');
+      
+      const newUser = await pool.query(
+        'INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3) RETURNING id, username',
         ['admin', hashedPassword, 'admin']
       );
-      console.log('✅ Usuario admin creado');
+      console.log('✅ Usuario admin creado exitosamente:', newUser.rows[0]);
+    } else {
+      console.log('✅ Usuario admin ya existe:', adminExists.rows[0]);
+      
+      // Opcional: Actualizar contraseña si es necesario
+      console.log('🔄 Actualizando contraseña del admin...');
+      const hashedPassword = await bcrypt.hash('admin123', 10);
+      await pool.query(
+        'UPDATE users SET password_hash = $1 WHERE username = $2',
+        [hashedPassword, 'admin']
+      );
+      console.log('✅ Contraseña del admin actualizada');
     }
+
+    // Verificar usuarios finales
+    const allUsers = await pool.query('SELECT id, username, role, created_at FROM users');
+    console.log('👥 Usuarios en la base de datos:', allUsers.rows);
 
     // Insertar datos de ejemplo si no existen
     const productsExist = await pool.query('SELECT COUNT(*) FROM products');
+    console.log(`📦 Productos existentes: ${productsExist.rows[0].count}`);
+    
     if (parseInt(productsExist.rows[0].count) === 0) {
+      console.log('➕ Insertando productos de ejemplo...');
       await pool.query(`
         INSERT INTO products (name, description, price, stock, branch, images) VALUES
         ('Laptop Dell XPS 13', 'Laptop ultrabook con procesador Intel Core i7', 1299.99, 15, 'Principal', '[]'),
@@ -95,7 +130,9 @@ async function initDatabase() {
         ('MacBook Air M3', 'Laptop Apple con chip M3', 1199.99, 12, 'Principal', '[]'),
         ('Google Pixel 8', 'Smartphone Google con IA avanzada', 699.99, 18, 'Este', '[]')
       `);
+      console.log('✅ Productos de ejemplo insertados');
 
+      console.log('➕ Insertando pedidos de ejemplo...');
       await pool.query(`
         INSERT INTO orders (customer_name, products, address, total, status) VALUES
         ('Juan Pérez', '[{"name": "Laptop Dell XPS 13", "quantity": 1, "price": 1299.99}]', 'Calle Principal 123, Santo Domingo', 1299.99, 'pending'),
@@ -103,12 +140,24 @@ async function initDatabase() {
         ('Carlos Rodríguez', '[{"name": "Samsung Galaxy S24", "quantity": 1, "price": 899.99}, {"name": "iPhone 15 Pro", "quantity": 1, "price": 999.99}]', 'Calle Mella 789, Santiago', 1899.98, 'processing'),
         ('Ana Martín', '[{"name": "MacBook Air M3", "quantity": 1, "price": 1199.99}]', 'Plaza Central 456, La Vega', 1199.99, 'pending')
       `);
-      console.log('✅ Datos de ejemplo insertados');
+      console.log('✅ Pedidos de ejemplo insertados');
     }
 
-    console.log('✅ Base de datos inicializada correctamente');
+    console.log('🎉 Base de datos inicializada correctamente');
+    
+    // Verificación final
+    const finalStats = await pool.query(`
+      SELECT 
+        (SELECT COUNT(*) FROM users) as usuarios,
+        (SELECT COUNT(*) FROM products) as productos,
+        (SELECT COUNT(*) FROM orders) as pedidos
+    `);
+    console.log('📊 Estadísticas finales:', finalStats.rows[0]);
+    
   } catch (error) {
     console.error('❌ Error inicializando base de datos:', error);
+    console.error('📍 Stack trace:', error.stack);
+    throw error;
   }
 }
 
