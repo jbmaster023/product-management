@@ -36,6 +36,12 @@ app.use((req, res, next) => {
 });
 
 // Datos de fallback en memoria
+let memoryCategories = [
+  { id: 1, name: 'General' },
+  { id: 2, name: 'Electrónica' },
+  { id: 3, name: 'Hogar' }
+];
+
 let memoryProducts = [
   {
     id: 1,
@@ -43,6 +49,7 @@ let memoryProducts = [
     description: 'Laptop ultrabook con procesador Intel Core i7',
     price: 1299.99,
     stock: 15,
+    category: 'Electrónica',
     branch: 'Principal',
     images: '[]',
     created_at: new Date().toISOString()
@@ -53,6 +60,7 @@ let memoryProducts = [
     description: 'Smartphone Apple con chip A17 Pro',
     price: 999.99,
     stock: 25,
+    category: 'Electrónica',
     branch: 'Norte',
     images: '[]',
     created_at: new Date().toISOString()
@@ -63,6 +71,7 @@ let memoryProducts = [
     description: 'Smartphone Android con cámara de 200MP',
     price: 899.99,
     stock: 30,
+    category: 'Electrónica',
     branch: 'Sur',
     images: '[]',
     created_at: new Date().toISOString()
@@ -126,6 +135,14 @@ async function initDatabase() {
     `);
 
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS categories (
+        id SERIAL PRIMARY KEY,
+        name VARCHAR(100) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS products (
         id SERIAL PRIMARY KEY,
         name VARCHAR(255) NOT NULL,
@@ -133,6 +150,7 @@ async function initDatabase() {
         price DECIMAL(10,2) NOT NULL,
         stock INTEGER NOT NULL,
         branch VARCHAR(100) NOT NULL,
+        category VARCHAR(100) DEFAULT '',
         images JSONB DEFAULT '[]',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -165,13 +183,21 @@ async function initDatabase() {
 
     // Migrar datos de memoria a PostgreSQL si están vacías las tablas
     const productsCount = await pool.query('SELECT COUNT(*) FROM products');
-    if (parseInt(productsCount.rows[0].count) === 0) {
+    const categoriesCount = await pool.query('SELECT COUNT(*) FROM categories');
+    if (parseInt(productsCount.rows[0].count) === 0 && parseInt(categoriesCount.rows[0].count) === 0) {
       console.log('📦 Migrating memory data to PostgreSQL...');
       
+      for (const category of memoryCategories) {
+        await pool.query(
+          'INSERT INTO categories (name) VALUES ($1)',
+          [category.name]
+        );
+      }
+
       for (const product of memoryProducts) {
         await pool.query(
-          'INSERT INTO products (name, description, price, stock, branch, images) VALUES ($1, $2, $3, $4, $5, $6)',
-          [product.name, product.description, product.price, product.stock, product.branch, product.images]
+          'INSERT INTO products (name, description, price, stock, branch, category, images) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+          [product.name, product.description, product.price, product.stock, product.branch, product.category, product.images]
         );
       }
       
@@ -273,6 +299,45 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// Rutas de categorías
+app.get('/api/categories', async (req, res) => {
+  try {
+    if (dbConnected) {
+      const result = await pool.query('SELECT * FROM categories ORDER BY name');
+      res.json(result.rows);
+    } else {
+      res.json(memoryCategories);
+    }
+  } catch (error) {
+    console.error('Error getting categories:', error);
+    res.json(memoryCategories);
+  }
+});
+
+app.post('/api/categories', async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name) {
+      return res.status(400).json({ error: 'Nombre requerido' });
+    }
+
+    if (dbConnected) {
+      const result = await pool.query(
+        'INSERT INTO categories (name) VALUES ($1) RETURNING *',
+        [name]
+      );
+      res.json(result.rows[0]);
+    } else {
+      const newCategory = { id: Date.now(), name };
+      memoryCategories.push(newCategory);
+      res.json(newCategory);
+    }
+  } catch (error) {
+    console.error('Error creating category:', error);
+    res.status(500).json({ error: 'Error creando categoría' });
+  }
+});
+
 // Rutas de productos
 app.get('/api/products', async (req, res) => {
   try {
@@ -307,7 +372,7 @@ app.get('/api/products', async (req, res) => {
 
 app.post('/api/products', async (req, res) => {
   try {
-    const { name, description, price, stock, branch, images = [] } = req.body;
+    const { name, description, price, stock, branch, category = '', images = [] } = req.body;
     
     if (!name || !price || !stock || !branch) {
       return res.status(400).json({ error: 'Campos requeridos: name, price, stock, branch' });
@@ -315,8 +380,8 @@ app.post('/api/products', async (req, res) => {
 
     if (dbConnected) {
       const result = await pool.query(
-        'INSERT INTO products (name, description, price, stock, branch, images) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *',
-        [name, description, parseFloat(price), parseInt(stock), branch, JSON.stringify(images)]
+        'INSERT INTO products (name, description, price, stock, branch, category, images) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
+        [name, description, parseFloat(price), parseInt(stock), branch, category, JSON.stringify(images)]
       );
       res.json(result.rows[0]);
     } else {
@@ -327,6 +392,7 @@ app.post('/api/products', async (req, res) => {
         price: parseFloat(price),
         stock: parseInt(stock),
         branch,
+        category,
         images: JSON.stringify(images),
         created_at: new Date().toISOString()
       };
@@ -342,12 +408,12 @@ app.post('/api/products', async (req, res) => {
 app.put('/api/products/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, price, stock, branch, images = [] } = req.body;
+    const { name, description, price, stock, branch, category = '', images = [] } = req.body;
     
     if (dbConnected) {
       const result = await pool.query(
-        'UPDATE products SET name = $1, description = $2, price = $3, stock = $4, branch = $5, images = $6, updated_at = CURRENT_TIMESTAMP WHERE id = $7 RETURNING *',
-        [name, description, parseFloat(price), parseInt(stock), branch, JSON.stringify(images), id]
+        'UPDATE products SET name = $1, description = $2, price = $3, stock = $4, branch = $5, category = $6, images = $7, updated_at = CURRENT_TIMESTAMP WHERE id = $8 RETURNING *',
+        [name, description, parseFloat(price), parseInt(stock), branch, category, JSON.stringify(images), id]
       );
       
       if (result.rows.length === 0) {
@@ -367,6 +433,7 @@ app.put('/api/products/:id', async (req, res) => {
         price: parseFloat(price),
         stock: parseInt(stock),
         branch,
+        category,
         images: JSON.stringify(images)
       };
       res.json(memoryProducts[productIndex]);
@@ -493,6 +560,8 @@ app.get('/', (req, res) => {
       'POST /api/products',
       'PUT /api/products/:id',
       'DELETE /api/products/:id',
+      'GET /api/categories',
+      'POST /api/categories',
       'GET /api/orders',
       'POST /api/orders',
       'GET /api/stats'
