@@ -777,19 +777,26 @@
             e.preventDefault();
             const username = document.getElementById('username').value;
             const password = document.getElementById('password').value;
-            
+
             try {
-                const response = await apiCall('/auth/login', {
+                const resp = await fetch(`${API_BASE_URL}/auth/login`, {
                     method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
                     body: JSON.stringify({ username, password })
                 });
 
-                if (response.success) {
-                    currentUser = response.user;
+                const data = await resp.json();
+
+                if (resp.ok && data.success) {
+                    currentUser = data.user;
                     localStorage.setItem('currentUser', JSON.stringify(currentUser));
                     showMainApp();
+                } else if (resp.status === 401) {
+                    showError(data.error || 'Credenciales incorrectas');
                 } else {
-                    showError('Credenciales incorrectas');
+                    showError(data.error || 'Error de autenticación');
                 }
             } catch (error) {
                 showError('Error de conexión. Verifica que el servidor esté funcionando.');
