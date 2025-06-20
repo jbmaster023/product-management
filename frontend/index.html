@@ -544,6 +544,9 @@
                 <button class="nav-tab" onclick="showTab('orders')">
                     <i class="fas fa-shopping-cart"></i> Pedidos
                 </button>
+                <button class="nav-tab" onclick="showTab('settings')">
+                    <i class="fas fa-cog"></i> Configuraciones
+                </button>
             </div>
 
             <div class="tab-content">
@@ -592,6 +595,7 @@
                                             <th>Precio</th>
                                             <th>Stock</th>
                                             <th>Sucursal</th>
+                                            <th>Categoría</th>
                                             <th>Acciones</th>
                                         </tr>
                                     </thead>
@@ -653,6 +657,32 @@
                         </div>
                     </div>
                 </div>
+
+                <!-- Settings Tab -->
+                <div id="settings" class="tab-pane">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Categorías de Productos</h3>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <input type="text" id="categoryName" class="form-control" placeholder="Nueva categoría">
+                                <button onclick="createCategory()" class="btn btn-primary"><i class="fas fa-plus"></i> Crear</button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-container">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Nombre</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="categoriesTable"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -706,6 +736,12 @@
                                 </select>
                             </div>
                         </div>
+                        <div class="col">
+                            <div class="form-group">
+                                <label>Categoría *</label>
+                                <select id="productCategory" class="form-control" required></select>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="form-group">
@@ -736,6 +772,7 @@
         // Global variables
         let products = [];
         let orders = [];
+        let categories = [];
         let currentProduct = null;
         let productImages = [];
         let currentUser = null;
@@ -833,7 +870,8 @@
                 await Promise.all([
                     loadProducts(),
                     loadOrders(),
-                    loadStats()
+                    loadStats(),
+                    loadCategories()
                 ]);
             } catch (error) {
                 console.error('Error loading data:', error);
@@ -869,6 +907,16 @@
             }
         }
 
+        async function loadCategories() {
+            try {
+                categories = await apiCall('/categories');
+                renderCategories();
+                populateCategorySelect();
+            } catch (error) {
+                console.error('Error loading categories:', error);
+            }
+        }
+
         // Tab navigation
         function showTab(tabName) {
             // Hide all tabs
@@ -889,6 +937,7 @@
             currentProduct = product;
             const modal = document.getElementById('productModal');
             const title = document.getElementById('modalTitle');
+            populateCategorySelect();
             
             if (product) {
                 title.textContent = 'Editar Producto';
@@ -914,6 +963,7 @@
             document.getElementById('productPrice').value = product.price;
             document.getElementById('productStock').value = product.stock;
             document.getElementById('productBranch').value = product.branch;
+            document.getElementById('productCategory').value = product.category || '';
             
             // Load existing images
             productImages = product.images ? [...product.images] : [];
@@ -978,7 +1028,8 @@
             const price = parseFloat(document.getElementById('productPrice').value);
             const stock = parseInt(document.getElementById('productStock').value);
             const branch = document.getElementById('productBranch').value;
-            
+            const category = document.getElementById('productCategory').value;
+
             if (!name || !price || !stock || !branch) {
                 alert('Por favor completa todos los campos requeridos');
                 return;
@@ -991,6 +1042,7 @@
                     price,
                     stock,
                     branch,
+                    category,
                     images: productImages
                 };
 
@@ -1061,7 +1113,7 @@ function renderProducts() {
     if (!products || products.length === 0) {
         const row = document.createElement('tr');
         row.innerHTML = `
-            <td colspan="8" style="text-align: center; padding: 20px; color: #666;">
+            <td colspan="9" style="text-align: center; padding: 20px; color: #666;">
                 No hay productos disponibles. <a href="#" onclick="showProductModal()" style="color: var(--primary);">Crear primer producto</a>
             </td>
         `;
@@ -1105,6 +1157,7 @@ function renderProducts() {
             const productPrice = product.price ? parseFloat(product.price).toFixed(2) : '0.00';
             const productStock = product.stock || 0;
             const productBranch = product.branch || 'Sin sucursal';
+            const productCategory = product.category || '-';
             
             row.innerHTML = `
                 <td>${productId}</td>
@@ -1119,6 +1172,7 @@ function renderProducts() {
                 <td>$${productPrice}</td>
                 <td>${productStock}</td>
                 <td>${productBranch}</td>
+                <td>${productCategory}</td>
                 <td>
                     <button onclick="editProduct(${productId})" class="btn btn-warning btn-sm" title="Editar producto">
                         <i class="fas fa-edit"></i>
@@ -1139,7 +1193,7 @@ function renderProducts() {
             // Crear fila de error para este producto específico
             const errorRow = document.createElement('tr');
             errorRow.innerHTML = `
-                <td colspan="8" style="background: #fef2f2; color: #991b1b; padding: 10px; text-align: center;">
+                    <td colspan="9" style="background: #fef2f2; color: #991b1b; padding: 10px; text-align: center;">
                     Error al cargar producto ${product.id || 'desconocido'}: ${error.message}
                 </td>
             `;
@@ -1185,7 +1239,7 @@ async function loadProducts(search = '') {
         if (tbody) {
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="8" style="background: #fef2f2; color: #991b1b; padding: 20px; text-align: center;">
+                <td colspan="9" style="background: #fef2f2; color: #991b1b; padding: 20px; text-align: center;">
                         <strong>Error cargando productos:</strong><br>
                         ${error.message}<br>
                         <button onclick="loadProducts()" class="btn btn-primary btn-sm" style="margin-top: 10px;">
@@ -1202,7 +1256,43 @@ async function loadProducts(search = '') {
 }
 
 
-        function renderOrders() {
+function populateCategorySelect() {
+    const select = document.getElementById('productCategory');
+    if (!select) return;
+    select.innerHTML = '<option value="">Seleccionar categoría</option>';
+    categories.forEach(cat => {
+        const opt = document.createElement('option');
+        opt.value = cat.name;
+        opt.textContent = cat.name;
+        select.appendChild(opt);
+    });
+}
+
+function renderCategories() {
+    const tbody = document.getElementById('categoriesTable');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    categories.forEach(cat => {
+        const row = document.createElement('tr');
+        row.innerHTML = `<td>${cat.id}</td><td>${cat.name}</td>`;
+        tbody.appendChild(row);
+    });
+}
+
+async function createCategory() {
+    const input = document.getElementById('categoryName');
+    const name = input.value.trim();
+    if (!name) return alert('Nombre de categoría requerido');
+    try {
+        await apiCall('/categories', { method: 'POST', body: JSON.stringify({ name }) });
+        input.value = '';
+        await loadCategories();
+    } catch (error) {
+        console.error('Error creating category:', error);
+    }
+}
+
+function renderOrders() {
             const tbody = document.getElementById('ordersTable');
             tbody.innerHTML = '';
             
