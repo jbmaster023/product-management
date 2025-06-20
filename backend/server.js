@@ -150,7 +150,7 @@ async function initDatabase() {
         price DECIMAL(10,2) NOT NULL,
         stock INTEGER NOT NULL,
         branch VARCHAR(100) NOT NULL,
-        category VARCHAR(100) DEFAULT '',
+        category_id INTEGER REFERENCES categories(id),
         images JSONB DEFAULT '[]',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -195,9 +195,14 @@ async function initDatabase() {
       }
 
       for (const product of memoryProducts) {
+        const catRes = await pool.query(
+          'SELECT id FROM categories WHERE name = $1',
+          [product.category]
+        );
+        const catId = catRes.rows.length ? catRes.rows[0].id : null;
         await pool.query(
-          'INSERT INTO products (name, description, price, stock, branch, category, images) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-          [product.name, product.description, product.price, product.stock, product.branch, product.category, product.images]
+          'INSERT INTO products (name, description, price, stock, branch, category_id, images) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+          [product.name, product.description, product.price, product.stock, product.branch, catId, product.images]
         );
       }
       
@@ -345,12 +350,21 @@ app.get('/api/products', async (req, res) => {
     if (dbConnected) {
       if (search) {
         const result = await pool.query(
-          'SELECT * FROM products WHERE name ILIKE $1 OR description ILIKE $1 ORDER BY created_at DESC',
+          `SELECT p.*, c.name AS category
+           FROM products p
+           LEFT JOIN categories c ON p.category_id = c.id
+           WHERE p.name ILIKE $1 OR p.description ILIKE $1
+           ORDER BY p.created_at DESC`,
           [`%${search}%`]
         );
         res.json(result.rows);
       } else {
-        const result = await pool.query('SELECT * FROM products ORDER BY created_at DESC');
+        const result = await pool.query(
+          `SELECT p.*, c.name AS category
+           FROM products p
+           LEFT JOIN categories c ON p.category_id = c.id
+           ORDER BY p.created_at DESC`
+        );
         res.json(result.rows);
       }
     } else {
@@ -379,9 +393,23 @@ app.post('/api/products', async (req, res) => {
     }
 
     if (dbConnected) {
+      let categoryId = null;
+      if (category) {
+        const catRes = await pool.query('SELECT id FROM categories WHERE name = $1', [category]);
+        if (catRes.rows.length) {
+          categoryId = catRes.rows[0].id;
+        }
+      }
+      const insert = await pool.query(
+        'INSERT INTO products (name, description, price, stock, branch, category_id, images) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
+        [name, description, parseFloat(price), parseInt(stock), branch, categoryId, JSON.stringify(images)]
+      );
       const result = await pool.query(
-        'INSERT INTO products (name, description, price, stock, branch, category, images) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *',
-        [name, description, parseFloat(price), parseInt(stock), branch, category, JSON.stringify(images)]
+        `SELECT p.*, c.name AS category
+         FROM products p
+         LEFT JOIN categories c ON p.category_id = c.id
+         WHERE p.id = $1`,
+        [insert.rows[0].id]
       );
       res.json(result.rows[0]);
     } else {
@@ -411,15 +439,27 @@ app.put('/api/products/:id', async (req, res) => {
     const { name, description, price, stock, branch, category = '', images = [] } = req.body;
     
     if (dbConnected) {
+      let categoryId = null;
+      if (category) {
+        const catRes = await pool.query('SELECT id FROM categories WHERE name = $1', [category]);
+        if (catRes.rows.length) categoryId = catRes.rows[0].id;
+      }
       const result = await pool.query(
-        'UPDATE products SET name = $1, description = $2, price = $3, stock = $4, branch = $5, category = $6, images = $7, updated_at = CURRENT_TIMESTAMP WHERE id = $8 RETURNING *',
-        [name, description, parseFloat(price), parseInt(stock), branch, category, JSON.stringify(images), id]
+        'UPDATE products SET name = $1, description = $2, price = $3, stock = $4, branch = $5, category_id = $6, images = $7, updated_at = CURRENT_TIMESTAMP WHERE id = $8 RETURNING id',
+        [name, description, parseFloat(price), parseInt(stock), branch, categoryId, JSON.stringify(images), id]
       );
-      
+
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Producto no encontrado' });
       }
-      res.json(result.rows[0]);
+      const updated = await pool.query(
+        `SELECT p.*, c.name AS category
+         FROM products p
+         LEFT JOIN categories c ON p.category_id = c.id
+         WHERE p.id = $1`,
+        [id]
+      );
+      res.json(updated.rows[0]);
     } else {
       const productIndex = memoryProducts.findIndex(p => p.id == id);
       if (productIndex === -1) {
