@@ -215,7 +215,7 @@ async function initDatabase() {
     }
 
     // Migrar datos de memoria a PostgreSQL si están vacías las tablas
-    const productsCount = await pool.query('SELECT COUNT(*) FROM products');
+    const productsCount = await pool.query('SELECT COUNT(*) FROM productos');
     const categoriesCount = await pool.query('SELECT COUNT(*) FROM categories');
     if (parseInt(productsCount.rows[0].count) === 0 && parseInt(categoriesCount.rows[0].count) === 0) {
       console.log('📦 Migrating memory data to PostgreSQL...');
@@ -228,14 +228,9 @@ async function initDatabase() {
       }
 
       for (const product of memoryProducts) {
-        const catRes = await pool.query(
-          'SELECT id FROM categories WHERE name = $1',
-          [product.category]
-        );
-        const catId = catRes.rows.length ? catRes.rows[0].id : null;
         await pool.query(
-          'INSERT INTO products (name, description, price, stock, branch, category_id, images) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-          [product.name, product.description, product.price, product.stock, product.branch, catId, product.images]
+          'INSERT INTO productos (numero_articulo, nombre, categoria, costo, cantidad, descripcion, id_articulo, imagen_metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+          [String(product.id), product.name, product.category, product.price, product.stock, product.description, product.id, product.images]
         );
       }
       
@@ -383,19 +378,19 @@ app.get('/api/products', async (req, res) => {
     if (dbConnected) {
       if (search) {
         const result = await pool.query(
-          `SELECT p.*, c.name AS category
-           FROM products p
-           LEFT JOIN categories c ON p.category_id = c.id
-           WHERE p.name ILIKE $1 OR p.description ILIKE $1
+          `SELECT p.id, p.nombre AS name, p.descripcion AS description, p.costo AS price, p.cantidad AS stock,
+                  p.categoria AS category, '' AS branch, p.imagen_metadata AS images, p.created_at, p.updated_at
+           FROM productos p
+           WHERE p.nombre ILIKE $1 OR p.descripcion ILIKE $1
            ORDER BY p.created_at DESC`,
           [`%${search}%`]
         );
         res.json(result.rows);
       } else {
         const result = await pool.query(
-          `SELECT p.*, c.name AS category
-           FROM products p
-           LEFT JOIN categories c ON p.category_id = c.id
+          `SELECT p.id, p.nombre AS name, p.descripcion AS description, p.costo AS price, p.cantidad AS stock,
+                  p.categoria AS category, '' AS branch, p.imagen_metadata AS images, p.created_at, p.updated_at
+           FROM productos p
            ORDER BY p.created_at DESC`
         );
         res.json(result.rows);
@@ -425,26 +420,21 @@ app.post('/api/products', async (req, res) => {
       return res.status(400).json({ error: 'Campos requeridos: name, price, stock, branch' });
     }
 
-    if (dbConnected) {
-      let categoryId = null;
-      if (category) {
-        const catRes = await pool.query('SELECT id FROM categories WHERE name = $1', [category]);
-        if (catRes.rows.length) {
-          categoryId = catRes.rows[0].id;
-        }
-      }
-      const insert = await pool.query(
-        'INSERT INTO products (name, description, price, stock, branch, category_id, images) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id',
-        [name, description, parseFloat(price), parseInt(stock), branch, categoryId, JSON.stringify(images)]
-      );
-      const result = await pool.query(
-        `SELECT p.*, c.name AS category
-         FROM products p
-         LEFT JOIN categories c ON p.category_id = c.id
-         WHERE p.id = $1`,
-        [insert.rows[0].id]
-      );
-      res.json(result.rows[0]);
+      if (dbConnected) {
+        const numeroArticulo = Date.now().toString();
+        const idArticulo = Date.now();
+        const insert = await pool.query(
+          'INSERT INTO productos (numero_articulo, nombre, categoria, costo, cantidad, descripcion, id_articulo, imagen_metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id',
+          [numeroArticulo, name, category, parseFloat(price), parseInt(stock), description, idArticulo, JSON.stringify(images)]
+        );
+        const result = await pool.query(
+          `SELECT p.id, p.nombre AS name, p.descripcion AS description, p.costo AS price, p.cantidad AS stock,
+                  p.categoria AS category, '' AS branch, p.imagen_metadata AS images, p.created_at, p.updated_at
+           FROM productos p
+           WHERE p.id = $1`,
+          [insert.rows[0].id]
+        );
+        res.json(result.rows[0]);
     } else {
       const newProduct = {
         id: Date.now(),
@@ -471,27 +461,22 @@ app.put('/api/products/:id', async (req, res) => {
     const { id } = req.params;
     const { name, description, price, stock, branch, category = '', images = [] } = req.body;
     
-    if (dbConnected) {
-      let categoryId = null;
-      if (category) {
-        const catRes = await pool.query('SELECT id FROM categories WHERE name = $1', [category]);
-        if (catRes.rows.length) categoryId = catRes.rows[0].id;
-      }
-      const result = await pool.query(
-        'UPDATE products SET name = $1, description = $2, price = $3, stock = $4, branch = $5, category_id = $6, images = $7, updated_at = CURRENT_TIMESTAMP WHERE id = $8 RETURNING id',
-        [name, description, parseFloat(price), parseInt(stock), branch, categoryId, JSON.stringify(images), id]
-      );
+      if (dbConnected) {
+        const result = await pool.query(
+          'UPDATE productos SET nombre = $1, descripcion = $2, costo = $3, cantidad = $4, categoria = $5, imagen_metadata = $6, updated_at = CURRENT_TIMESTAMP WHERE id = $7 RETURNING id',
+          [name, description, parseFloat(price), parseInt(stock), category, JSON.stringify(images), id]
+        );
 
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Producto no encontrado' });
       }
-      const updated = await pool.query(
-        `SELECT p.*, c.name AS category
-         FROM products p
-         LEFT JOIN categories c ON p.category_id = c.id
-         WHERE p.id = $1`,
-        [id]
-      );
+        const updated = await pool.query(
+          `SELECT p.id, p.nombre AS name, p.descripcion AS description, p.costo AS price, p.cantidad AS stock,
+                  p.categoria AS category, '' AS branch, p.imagen_metadata AS images, p.created_at, p.updated_at
+           FROM productos p
+           WHERE p.id = $1`,
+          [id]
+        );
       res.json(updated.rows[0]);
     } else {
       const productIndex = memoryProducts.findIndex(p => p.id == id);
@@ -521,8 +506,8 @@ app.delete('/api/products/:id', async (req, res) => {
   try {
     const { id } = req.params;
     
-    if (dbConnected) {
-      const result = await pool.query('DELETE FROM products WHERE id = $1 RETURNING *', [id]);
+      if (dbConnected) {
+        const result = await pool.query('DELETE FROM productos WHERE id = $1 RETURNING *', [id]);
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Producto no encontrado' });
       }
@@ -589,9 +574,9 @@ app.post('/api/orders', async (req, res) => {
 app.get('/api/stats', async (req, res) => {
   try {
     if (dbConnected) {
-      const [productsCount, productsValue, ordersCount, salesTotal] = await Promise.all([
-        pool.query('SELECT COUNT(*) FROM products'),
-        pool.query('SELECT COALESCE(SUM(price * stock), 0) as total_value FROM products'),
+        const [productsCount, productsValue, ordersCount, salesTotal] = await Promise.all([
+          pool.query('SELECT COUNT(*) FROM productos'),
+          pool.query('SELECT COALESCE(SUM(costo * cantidad), 0) as total_value FROM productos'),
         pool.query('SELECT COUNT(*) FROM orders'),
         pool.query('SELECT COALESCE(SUM(total), 0) as total_sales FROM orders')
       ]);
