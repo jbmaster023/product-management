@@ -158,6 +158,39 @@ async function initDatabase() {
     `);
 
     await pool.query(`
+      CREATE TABLE IF NOT EXISTS productos (
+        id SERIAL PRIMARY KEY,
+        numero_articulo VARCHAR(255),
+        nombre VARCHAR(255) NOT NULL,
+        categoria VARCHAR(255),
+        costo DECIMAL(10,2) DEFAULT 0,
+        cantidad INTEGER DEFAULT 0,
+        descripcion TEXT,
+        id_articulo INTEGER UNIQUE NOT NULL,
+        activo BOOLEAN DEFAULT true,
+        imagen_url VARCHAR(500),
+        imagen_base64 TEXT,
+        imagen_metadata JSONB,
+        created_at TIMESTAMP DEFAULT NOW(),
+        updated_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_productos_id_articulo ON productos(id_articulo);');
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_productos_categoria ON productos(categoria);');
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_productos_numero_articulo ON productos(numero_articulo);');
+
+    await pool.query("COMMENT ON TABLE productos IS 'Tabla de productos sincronizada desde WilmaxPOS';");
+    await pool.query("COMMENT ON COLUMN productos.id_articulo IS 'ID único del artículo desde WilmaxPOS (clave para upsert)';");
+    await pool.query("COMMENT ON COLUMN productos.numero_articulo IS 'Código de artículo del sistema WilmaxPOS';");
+    await pool.query("COMMENT ON COLUMN productos.costo IS 'Costo del producto en moneda local';");
+    await pool.query("COMMENT ON COLUMN productos.cantidad IS 'Stock disponible del producto';");
+    await pool.query("COMMENT ON COLUMN productos.activo IS 'Estado del producto: true=activo, false=inactivo';");
+    await pool.query("COMMENT ON COLUMN productos.imagen_url IS 'URL pública de la imagen del producto (recomendado para WebSocket)';");
+    await pool.query("COMMENT ON COLUMN productos.imagen_base64 IS 'Imagen en formato base64 (alternativa para casos específicos)';");
+    await pool.query("COMMENT ON COLUMN productos.imagen_metadata IS 'Metadatos de la imagen: tamaño, formato, dimensiones, etc.';");
+
+    await pool.query(`
       CREATE TABLE IF NOT EXISTS orders (
         id SERIAL PRIMARY KEY,
         customer_name VARCHAR(255) NOT NULL,
