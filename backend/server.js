@@ -330,9 +330,6 @@ app.get('/api/products', async (req, res) => {
                             s.nombre || ': ' || COALESCE(i.cantidad, 0), 
                             ', ' ORDER BY s.nombre
                           ) AS stock_detail,
-                          JSON_OBJECT_AGG(
-                            s.nombre, COALESCE(i.cantidad, 0)
-                          ) AS stock_by_branch,
                           p.created_at, 
                           p.updated_at
                          FROM productos p
@@ -412,9 +409,6 @@ app.post('/api/products', async (req, res) => {
             s.nombre || ': ' || COALESCE(i.cantidad, 0), 
             ', ' ORDER BY s.nombre
           ) AS stock_detail,
-          JSON_OBJECT_AGG(
-            s.nombre, COALESCE(i.cantidad, 0)
-          ) AS stock_by_branch,
           p.created_at, 
           p.updated_at
          FROM productos p
@@ -594,6 +588,91 @@ app.post('/api/orders', async (req, res) => {
   } catch (error) {
     console.error('❌ Error creating order:', error);
     res.status(500).json({ error: 'Error creando pedido: ' + error.message });
+  }
+});
+
+// Ruta para actualizar stock por sucursal
+app.put('/api/products/:id/stock', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { stock_principal, stock_higuey } = req.body;
+    
+    console.log(`📦 Updating stock for product ${id}:`, { stock_principal, stock_higuey });
+    
+    if (dbConnected) {
+      // Actualizar stock en ambas sucursales
+      await pool.query(
+        'UPDATE inventarios SET cantidad = $1 WHERE id_articulo = $2 AND sucursal_id = 1',
+        [parseInt(stock_principal) || 0, id]
+      );
+      
+      await pool.query(
+        'UPDATE inventarios SET cantidad = $1 WHERE id_articulo = $2 AND sucursal_id = 2',
+        [parseInt(stock_higuey) || 0, id]
+      );
+      
+      // Si no existe el inventario, insertarlo
+      await pool.query(`
+        INSERT INTO inventarios (id_articulo, sucursal_id, cantidad)
+        VALUES ($1, 1, $2)
+        ON CONFLICT (id_articulo, sucursal_id)
+        DO UPDATE SET cantidad = $2
+      `, [id, parseInt(stock_principal) || 0]);
+      
+      await pool.query(`
+        INSERT INTO inventarios (id_articulo, sucursal_id, cantidad)
+        VALUES ($1, 2, $2)
+        ON CONFLICT (id_articulo, sucursal_id)
+        DO UPDATE SET cantidad = $2
+      `, [id, parseInt(stock_higuey) || 0]);
+      
+      // Obtener el producto actualizado
+      const result = await pool.query(
+        `SELECT 
+          p.id_articulo AS id, 
+          p.nombre AS name, 
+          p.descripcion AS description, 
+          p.costo AS price,
+          p.categoria AS category,
+          COALESCE(SUM(i.cantidad), 0) AS stock,
+          STRING_AGG(
+            s.nombre || ': ' || COALESCE(i.cantidad, 0), 
+            ', ' ORDER BY s.nombre
+          ) AS stock_detail,
+          p.created_at, 
+          p.updated_at
+         FROM productos p
+         LEFT JOIN inventarios i ON p.id_articulo = i.id_articulo
+         LEFT JOIN sucursales s ON i.sucursal_id = s.id
+         WHERE p.id_articulo = $1
+         GROUP BY p.id_articulo, p.nombre, p.descripcion, p.costo, p.categoria, p.created_at, p.updated_at`,
+        [id]
+      );
+      
+      console.log('✅ Stock updated in database');
+      res.json(result.rows[0]);
+    } else {
+      // Actualizar en memoria
+      const productIndex = memoryProducts.findIndex(p => p.id == id);
+      if (productIndex === -1) {
+        return res.status(404).json({ error: 'Producto no encontrado' });
+      }
+      
+      const totalStock = (parseInt(stock_principal) || 0) + (parseInt(stock_higuey) || 0);
+      
+      memoryProducts[productIndex].stock = totalStock;
+      memoryProducts[productIndex].stock_detail = `Principal: ${stock_principal || 0}, Higüey: ${stock_higuey || 0}`;
+      memoryProducts[productIndex].stock_by_branch = {
+        'Principal': parseInt(stock_principal) || 0,
+        'Higüey': parseInt(stock_higuey) || 0
+      };
+      
+      console.log('✅ Stock updated in memory');
+      res.json(memoryProducts[productIndex]);
+    }
+  } catch (error) {
+    console.error('❌ Error updating stock:', error);
+    res.status(500).json({ error: 'Error actualizando stock: ' + error.message });
   }
 });
 
