@@ -961,8 +961,23 @@
     </div>
 
     <script>
-        // Configuración de la API
-        const API_BASE_URL = `http://${window.location.hostname}:3053/api`;
+        // Configuración de la API - Detecta automáticamente la IP
+        const API_BASE_URL = (() => {
+            const hostname = window.location.hostname;
+            
+            // Si estamos en una IP de red local, usar la misma IP
+            if (hostname.match(/^\d+\.\d+\.\d+\.\d+$/)) {
+                return `http://${hostname}:3053/api`;
+            }
+            
+            // Si estamos en localhost, usar localhost
+            if (hostname === 'localhost' || hostname === '127.0.0.1') {
+                return 'http://localhost:3053/api';
+            }
+            
+            // Fallback
+            return `http://${hostname}:3053/api`;
+        })();
         
         // Global variables
         let products = [];
@@ -991,6 +1006,7 @@
         async function apiCall(endpoint, options = {}) {
             try {
                 console.log(`🔄 API Call: ${endpoint}`, options);
+                console.log(`🌐 Full URL: ${API_BASE_URL}${endpoint}`);
                 
                 const response = await fetch(`${API_BASE_URL}${endpoint}`, {
                     headers: {
@@ -1001,11 +1017,25 @@
                 });
 
                 console.log(`📡 Response status: ${response.status}`);
+                console.log(`📡 Response headers:`, response.headers);
 
                 if (!response.ok) {
                     const errorText = await response.text();
                     console.error('❌ API Error Response:', errorText);
+                    
+                    // Si la respuesta contiene HTML, es probable que el backend no esté funcionando
+                    if (errorText.includes('<html>') || errorText.includes('<!DOCTYPE')) {
+                        throw new Error(`Backend no disponible. Verifica que esté ejecutándose en ${API_BASE_URL.replace('/api', '')}`);
+                    }
+                    
                     throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+                }
+
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    const responseText = await response.text();
+                    console.error('❌ Non-JSON response:', responseText);
+                    throw new Error('La respuesta del servidor no es JSON válido. Verifica que el backend esté funcionando correctamente.');
                 }
 
                 const data = await response.json();
@@ -1013,6 +1043,17 @@
                 return data;
             } catch (error) {
                 console.error('❌ API Error:', error);
+                
+                // Error de red (backend no disponible)
+                if (error.message.includes('Failed to fetch') || error.name === 'TypeError') {
+                    throw new Error(`No se puede conectar al backend en ${API_BASE_URL}. 
+                    
+Pasos para solucionar:
+1. Verifica que el backend esté ejecutándose: cd backend && node server-simple.js
+2. Verifica que el puerto 3053 esté disponible
+3. Si usas una IP de red, asegúrate de que el backend esté corriendo en la misma máquina`);
+                }
+                
                 throw error;
             }
         }
@@ -1699,12 +1740,44 @@
         // Test API connection on load
         async function testAPIConnection() {
             try {
-                console.log('🔍 Probando conexión con API...');
+                console.log(`🔍 Probando conexión con API en: ${API_BASE_URL}`);
                 const health = await apiCall('/health');
                 console.log('✅ API conectada correctamente:', health);
+                
+                // Mostrar mensaje de éxito en la UI
+                if (health.status === 'OK') {
+                    console.log(`🎉 Backend funcionando correctamente con ${health.productsCount || 0} productos`);
+                }
+                
                 return true;
             } catch (error) {
-                console.error('❌ API no disponible:', error);
+                console.error('❌ API no disponible:', error.message);
+                
+                // Mostrar error detallado en la UI
+                const errorDiv = document.createElement('div');
+                errorDiv.style.cssText = `
+                    position: fixed;
+                    top: 20px;
+                    right: 20px;
+                    background: #fee2e2;
+                    color: #991b1b;
+                    padding: 16px;
+                    border-radius: 8px;
+                    border: 1px solid #fecaca;
+                    max-width: 400px;
+                    z-index: 9999;
+                    font-family: monospace;
+                    font-size: 12px;
+                    line-height: 1.4;
+                `;
+                errorDiv.innerHTML = `
+                    <strong>⚠️ Error de Conexión con el Backend</strong><br><br>
+                    <strong>URL:</strong> ${API_BASE_URL}<br><br>
+                    <strong>Error:</strong> ${error.message}<br><br>
+                    <button onclick="this.parentElement.remove()" style="background: #dc2626; color: white; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer;">Cerrar</button>
+                `;
+                document.body.appendChild(errorDiv);
+                
                 return false;
             }
         }
