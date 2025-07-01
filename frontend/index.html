@@ -135,8 +135,30 @@
         }
 
         .btn-sm {
-            padding: 8px 16px;
-            font-size: 14px;
+            padding: 8px 12px;
+            font-size: 12px;
+            min-width: 40px;
+            transition: all 0.3s ease;
+        }
+
+        .btn-sm:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn-warning {
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            border: none;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #10b981, #059669);
+            border: none;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            border: none;
         }
 
         /* Main App Styles */
@@ -230,32 +252,49 @@
         .table-container {
             overflow-x: auto;
             margin-top: 20px;
+            border-radius: 12px;
+            box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.1);
         }
 
         .table {
             width: 100%;
             border-collapse: collapse;
             background: white;
-            border-radius: 10px;
+            border-radius: 12px;
             overflow: hidden;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            font-size: 14px;
         }
 
         .table th {
-            background: var(--primary);
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
             color: white;
-            padding: 16px;
-            text-align: left;
+            padding: 18px 16px;
+            text-align: center;
             font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: none;
         }
 
         .table td {
-            padding: 16px;
-            border-bottom: 1px solid var(--border);
+            padding: 16px 12px;
+            border-bottom: 1px solid #f1f5f9;
+            vertical-align: middle;
         }
 
         .table tr:hover {
-            background: var(--light);
+            background: linear-gradient(90deg, #f8fafc 0%, #f1f5f9 100%);
+            transform: translateY(-1px);
+            transition: all 0.2s ease;
+        }
+
+        .table tr {
+            transition: all 0.2s ease;
+        }
+
+        .table tr:last-child td {
+            border-bottom: none;
         }
 
         /* Modal */
@@ -477,51 +516,77 @@
         }
 
         .badge {
-            padding: 4px 8px;
-            border-radius: 12px;
-            font-size: 12px;
-            font-weight: 600;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 700;
             text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: inline-block;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
         
         .badge-warning {
-            background: #fef3c7;
-            color: #d97706;
+            background: linear-gradient(135deg, #fbbf24, #f59e0b);
+            color: white;
         }
         
         .badge-success {
-            background: #d1fae5;
-            color: #065f46;
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+        }
+        
+        .badge-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
         }
         
         .badge-info {
-            background: #dbeafe;
-            color: #1d4ed8;
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: white;
         }
 
         .pagination {
             display: flex;
             justify-content: center;
-            gap: 5px;
-            margin-top: 10px;
+            gap: 8px;
+            margin-top: 20px;
+            padding: 20px;
         }
 
         .pagination button {
-            padding: 6px 12px;
-            border: none;
-            border-radius: 6px;
-            background: var(--primary);
-            color: #fff;
+            padding: 10px 16px;
+            border: 2px solid #e2e8f0;
+            border-radius: 10px;
+            background: white;
+            color: #64748b;
             cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            min-width: 44px;
+        }
+
+        .pagination button:hover:not(.disabled) {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
         }
 
         .pagination button.disabled {
-            opacity: 0.5;
-            pointer-events: none;
+            opacity: 0.4;
+            cursor: not-allowed;
+            background: #f8fafc;
+            color: #cbd5e1;
+            border-color: #f1f5f9;
         }
 
         .pagination button.active {
-            background: var(--primary-dark);
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            border-color: var(--primary);
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
         }
     </style>
 </head>
@@ -613,14 +678,21 @@
                                 <table class="table">
                                     <thead>
                                         <tr>
-                                            <th>ID</th>
-                                            <th>Imagen</th>
-                                            <th>Nombre</th>
-                                            <th>Descripción</th>
-                                            <th>Precio</th>
-                                            <th>Stock</th>
-                                            <th>Categoría</th>
-                                            <th>Acciones</th>
+                                            <th style="width: 80px;">ID</th>
+                                            <th style="width: 80px;">Imagen</th>
+                                            <th style="width: 180px;">Producto</th>
+                                            <th style="width: 150px;">Descripción</th>
+                                            <th style="width: 120px;">Precio</th>
+                                            <th style="width: 140px;">
+                                                <div style="display: flex; flex-direction: column; align-items: center; gap: 4px;">
+                                                    <span>Stock por Sucursal</span>
+                                                    <div style="font-size: 10px; opacity: 0.8; font-weight: normal;">
+                                                        <i class="fas fa-store" style="margin-right: 3px;"></i>Principal | Higüey
+                                                    </div>
+                                                </div>
+                                            </th>
+                                            <th style="width: 120px;">Categoría</th>
+                                            <th style="width: 120px;">Acciones</th>
                                         </tr>
                                     </thead>
                                     <tbody id="productsTable">
@@ -1274,13 +1346,19 @@
             if (!products || products.length === 0) {
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td colspan="8" style="text-align: center; padding: 20px; color: #666;">
-                        <i class="fas fa-box-open" style="font-size: 3rem; opacity: 0.3; margin-bottom: 10px; display: block;"></i>
-                        No hay productos disponibles. 
-                        <br><br>
-                        <button onclick="showProductModal()" class="btn btn-primary">
-                            <i class="fas fa-plus"></i> Crear primer producto
-                        </button>
+                    <td colspan="8" style="text-align: center; padding: 60px 20px; background: linear-gradient(135deg, #f8fafc, #e2e8f0);">
+                        <div style="display: flex; flex-direction: column; align-items: center; gap: 20px;">
+                            <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #e2e8f0, #cbd5e1); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                                <i class="fas fa-box-open" style="font-size: 32px; color: #64748b;"></i>
+                            </div>
+                            <div>
+                                <h3 style="color: #475569; margin: 0 0 8px 0;">No hay productos disponibles</h3>
+                                <p style="color: #64748b; margin: 0 0 20px 0;">Comienza agregando tu primer producto al inventario</p>
+                                <button onclick="showProductModal()" class="btn btn-primary" style="padding: 12px 24px; font-size: 16px;">
+                                    <i class="fas fa-plus"></i> Crear primer producto
+                                </button>
+                            </div>
+                        </div>
                     </td>
                 `;
                 tbody.appendChild(row);
@@ -1329,52 +1407,82 @@
                     // Formatear stock con detalles por sucursal
                     let stockDisplay = '';
                     if (product.stock_detail) {
-                        // Si hay detalle por sucursal, mostrarlo
+                        // Si hay detalle por sucursal, mostrarlo de forma más estética
                         const totalStock = product.stock || 0;
                         const stockClass = totalStock > 10 ? 'badge-success' : totalStock > 0 ? 'badge-warning' : 'badge-danger';
+                        
+                        // Parsear el detalle de stock para mostrar de forma organizada
+                        let stockDetails = product.stock_detail;
+                        if (stockDetails.includes('PRINCIPAL') || stockDetails.includes('Principal')) {
+                            stockDetails = stockDetails
+                                .replace(/PRINCIPAL/g, 'Principal')
+                                .replace(/SUCURSAL HIGÜEY/g, 'Higüey');
+                        }
+                        
                         stockDisplay = `
-                            <div>
-                                <span class="badge ${stockClass}" style="display: block; margin-bottom: 5px;">
-                                    Total: ${totalStock}
-                                </span>
-                                <small style="color: #666; font-size: 11px; line-height: 1.2;">
-                                    ${product.stock_detail}
-                                </small>
+                            <div style="text-align: center;">
+                                <div class="badge ${stockClass}" style="display: inline-block; margin-bottom: 8px; font-size: 14px; font-weight: bold; padding: 6px 12px;">
+                                    TOTAL: ${totalStock}
+                                </div>
+                                <div style="font-size: 11px; color: #64748b; line-height: 1.3;">
+                                    ${stockDetails.split(', ').map(detail => {
+                                        const [sucursal, cantidad] = detail.split(': ');
+                                        const cantidadNum = parseInt(cantidad) || 0;
+                                        const colorClass = cantidadNum > 5 ? '#059669' : cantidadNum > 0 ? '#d97706' : '#dc2626';
+                                        return `
+                                            <div style="display: flex; justify-content: space-between; margin: 2px 0; padding: 2px 6px; background: #f8fafc; border-radius: 4px;">
+                                                <span style="font-weight: 500;">${sucursal}:</span>
+                                                <span style="color: ${colorClass}; font-weight: bold;">${cantidad}</span>
+                                            </div>
+                                        `;
+                                    }).join('')}
+                                </div>
                             </div>
                         `;
                     } else {
                         // Formato simple si no hay detalles
                         const stockClass = product.stock > 10 ? 'badge-success' : product.stock > 0 ? 'badge-warning' : 'badge-danger';
                         stockDisplay = `
-                            <span class="badge ${stockClass}">
-                                ${product.stock || 0}
-                            </span>
+                            <div style="text-align: center;">
+                                <span class="badge ${stockClass}" style="font-size: 14px; padding: 8px 12px;">
+                                    ${product.stock || 0}
+                                </span>
+                            </div>
                         `;
                     }
                     
                     row.innerHTML = `
-                        <td>${product.id || 'N/A'}</td>
-                        <td>
+                        <td style="text-align: center; font-weight: bold; color: #475569;">${product.id || 'N/A'}</td>
+                        <td style="text-align: center;">
                             <img src="${mainImage}" 
                                  alt="${product.name || 'Producto'}" 
-                                 style="width: 40px; height: 40px; object-fit: cover; border-radius: 5px; border: 1px solid #e2e8f0;"
-                                 onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDAiIGhlaWdodD0iNDAiIHZpZXdCb3g9IjAgMCA0MCA0MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQwIiBoZWlnaHQ9IjQwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xNiAxNEMyMC40MTgzIDE0IDI0IDE3LjU4MTcgMjQgMjJDMjQgMjYuNDE4MyAyMC40MTgzIDMwIDE2IDMwQzExLjU4MTcgMzAgOCAyNi40MTgzIDggMjJDOCAxNy41ODE3IDExLjU4MTcgMTQgMTYgMTRaIiBzdHJva2U9IiM5Q0EzQUYiIHN0cm9rZS13aWR0aD0iMiIvPgo8L3N2Zz4K'">
+                                 style="width: 50px; height: 50px; object-fit: cover; border-radius: 8px; border: 2px solid #e2e8f0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"
+                                 onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIHZpZXdCb3g9IjAgMCA1MCA1MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjUwIiBoZWlnaHQ9IjUwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0yMCAxOEMyNS41MjI4IDE4IDMwIDIyLjQ3NzIgMzAgMjhDMzAgMzMuNTIyOCAyNS41MjI4IDM4IDIwIDM4QzE0LjQ3NzIgMzggMTAgMzMuNTIyOCAxMCAyOEMxMCAyMi40NzcyIDE0LjQ3NzIgMTggMjAgMThaIiBzdHJva2U9IiM5Q0EzQUYiIHN0cm9rZS13aWR0aD0iMiIvPgo8L3N2Zz4K'">
                         </td>
-                        <td><strong>${product.name || 'Sin nombre'}</strong></td>
-                        <td>${product.description || '-'}</td>
-                        <td>${price}</td>
-                        <td>${stockDisplay}</td>
-                        <td>${product.category || '-'}</td>
-                        <td>
-                            <button onclick="editProduct(${product.id})" class="btn btn-warning btn-sm" title="Editar producto">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            <button onclick="showStockModal(${product.id})" class="btn btn-success btn-sm" title="Gestionar stock por sucursal" style="margin-left: 5px;">
-                                <i class="fas fa-warehouse"></i>
-                            </button>
-                            <button onclick="deleteProduct(${product.id})" class="btn btn-danger btn-sm" title="Eliminar producto" style="margin-left: 5px;">
-                                <i class="fas fa-trash"></i>
-                            </button>
+                        <td style="max-width: 200px;">
+                            <div style="font-weight: 600; color: #1e293b; margin-bottom: 4px;">${product.name || 'Sin nombre'}</div>
+                            <div style="font-size: 12px; color: #64748b; font-style: italic;">ID: ${product.id}</div>
+                        </td>
+                        <td style="color: #475569; max-width: 150px; line-height: 1.4;">${product.description || '-'}</td>
+                        <td style="text-align: center; font-weight: bold; color: #059669; font-size: 16px;">${price}</td>
+                        <td style="min-width: 120px; padding: 12px 8px;">${stockDisplay}</td>
+                        <td style="text-align: center;">
+                            <span style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                                ${product.category || 'Sin categoría'}
+                            </span>
+                        </td>
+                        <td style="text-align: center; padding: 8px;">
+                            <div style="display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;">
+                                <button onclick="editProduct(${product.id})" class="btn btn-warning btn-sm" title="Editar producto" style="border-radius: 8px; padding: 6px 8px;">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button onclick="showStockModal(${product.id})" class="btn btn-success btn-sm" title="Gestionar stock" style="border-radius: 8px; padding: 6px 8px;">
+                                    <i class="fas fa-warehouse"></i>
+                                </button>
+                                <button onclick="deleteProduct(${product.id})" class="btn btn-danger btn-sm" title="Eliminar producto" style="border-radius: 8px; padding: 6px 8px;">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
                         </td>
                     `;
                     
@@ -1394,13 +1502,19 @@
             if (tbody) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="8" style="background: #fef2f2; color: #991b1b; padding: 20px; text-align: center;">
-                            <i class="fas fa-exclamation-triangle" style="font-size: 2rem; margin-bottom: 10px; display: block;"></i>
-                            <strong>Error cargando productos:</strong><br>
-                            ${message}<br><br>
-                            <button onclick="loadProducts()" class="btn btn-primary">
-                                <i class="fas fa-redo"></i> Reintentar
-                            </button>
+                        <td colspan="8" style="text-align: center; padding: 40px 20px; background: linear-gradient(135deg, #fef2f2, #fee2e2);">
+                            <div style="display: flex; flex-direction: column; align-items: center; gap: 15px;">
+                                <div style="width: 60px; height: 60px; background: #fecaca; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                                    <i class="fas fa-exclamation-triangle" style="font-size: 24px; color: #dc2626;"></i>
+                                </div>
+                                <div>
+                                    <h4 style="color: #991b1b; margin: 0 0 8px 0;">Error cargando productos</h4>
+                                    <p style="color: #b91c1c; margin: 0 0 15px 0; font-size: 14px;">${message}</p>
+                                    <button onclick="loadProducts()" class="btn btn-primary">
+                                        <i class="fas fa-redo"></i> Reintentar
+                                    </button>
+                                </div>
+                            </div>
                         </td>
                     </tr>
                 `;
