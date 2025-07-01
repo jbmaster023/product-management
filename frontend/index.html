@@ -498,6 +498,31 @@
             background: #dbeafe;
             color: #1d4ed8;
         }
+
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 5px;
+            margin-top: 10px;
+        }
+
+        .pagination button {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            background: var(--primary);
+            color: #fff;
+            cursor: pointer;
+        }
+
+        .pagination button.disabled {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+
+        .pagination button.active {
+            background: var(--primary-dark);
+        }
     </style>
 </head>
 <body>
@@ -601,11 +626,12 @@
                                     </thead>
                                     <tbody id="productsTable">
                                         <!-- Products will be loaded here -->
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
+                                      </tbody>
+                                  </table>
+                              </div>
+                              <div id="pagination" class="pagination"></div>
+                          </div>
+                      </div>
                 </div>
 
                 <!-- Orders Tab -->
@@ -776,6 +802,8 @@
         let currentProduct = null;
         let productImages = [];
         let currentUser = null;
+        let currentPage = 1;
+        const itemsPerPage = 5;
 
         // Initialize app
         document.addEventListener('DOMContentLoaded', function() {
@@ -1076,16 +1104,16 @@
             }
         }
 
-async function deleteProduct(id) {
-            if (confirm('¿Estás seguro de que quieres eliminar este producto?')) {
+async function deactivateProduct(id) {
+            if (confirm('¿Estás seguro de que quieres desactivar este producto?')) {
                 try {
                     await apiCall(`/products/${id}`, {
                         method: 'DELETE'
                     });
                     await loadData();
                 } catch (error) {
-                    console.error('Error deleting product:', error);
-                    alert('Error eliminando producto');
+                    console.error('Error deactivating product:', error);
+                    alert('Error desactivando producto');
                 }
             }
 }
@@ -1093,6 +1121,39 @@ async function deleteProduct(id) {
 function onProductSearch() {
     const term = document.getElementById('productSearch').value;
     loadProducts(term);
+}
+
+function changePage(page) {
+    currentPage = page;
+    renderProducts();
+}
+
+function renderPagination(totalPages) {
+    const container = document.getElementById('pagination');
+    if (!container) return;
+    container.innerHTML = '';
+
+    if (totalPages <= 1) return;
+
+    const prev = document.createElement('button');
+    prev.textContent = 'Anterior';
+    if (currentPage === 1) prev.classList.add('disabled');
+    prev.onclick = () => changePage(currentPage - 1);
+    container.appendChild(prev);
+
+    for (let i = 1; i <= totalPages; i++) {
+        const btn = document.createElement('button');
+        btn.textContent = i;
+        if (i === currentPage) btn.classList.add('active');
+        btn.onclick = () => changePage(i);
+        container.appendChild(btn);
+    }
+
+    const next = document.createElement('button');
+    next.textContent = 'Siguiente';
+    if (currentPage === totalPages) next.classList.add('disabled');
+    next.onclick = () => changePage(currentPage + 1);
+    container.appendChild(next);
 }
 
 // Render Functions
@@ -1106,11 +1167,12 @@ function renderProducts() {
     }
     
     tbody.innerHTML = '';
-    
-    console.log('🔄 Rendering products:', products);
-    console.log('📊 Number of products to render:', products.length);
-    
-    if (!products || products.length === 0) {
+
+    const totalPages = Math.ceil(products.length / itemsPerPage);
+    const start = (currentPage - 1) * itemsPerPage;
+    const paginated = products.slice(start, start + itemsPerPage);
+
+    if (!paginated || paginated.length === 0) {
         const row = document.createElement('tr');
         row.innerHTML = `
             <td colspan="9" style="text-align: center; padding: 20px; color: #666;">
@@ -1118,10 +1180,11 @@ function renderProducts() {
             </td>
         `;
         tbody.appendChild(row);
+        renderPagination(totalPages);
         return;
     }
-    
-    products.forEach((product, index) => {
+
+    paginated.forEach((product, index) => {
         try {
             console.log(`🔄 Processing product ${index + 1}:`, product);
             
@@ -1154,7 +1217,7 @@ function renderProducts() {
             const productId = product.id || 'N/A';
             const productName = product.name || 'Sin nombre';
             const productDescription = product.description || '-';
-            const productPrice = product.price ? parseFloat(product.price).toFixed(2) : '0.00';
+            const productPrice = product.price ? new Intl.NumberFormat('es-DO', { style: 'currency', currency: 'DOP' }).format(product.price) : 'RD$0.00';
             const productStock = product.stock || 0;
             const productBranch = product.branch || 'Sin sucursal';
             const productCategory = product.category || '-';
@@ -1169,7 +1232,7 @@ function renderProducts() {
                 </td>
                 <td>${productName}</td>
                 <td>${productDescription}</td>
-                <td>$${productPrice}</td>
+                <td>${productPrice}</td>
                 <td>${productStock}</td>
                 <td>${productBranch}</td>
                 <td>${productCategory}</td>
@@ -1177,9 +1240,9 @@ function renderProducts() {
                     <button onclick="editProduct(${productId})" class="btn btn-warning btn-sm" title="Editar producto">
                         <i class="fas fa-edit"></i>
                     </button>
-                    <button onclick="deleteProduct(${productId})" class="btn btn-danger btn-sm" title="Eliminar producto" style="margin-left: 5px;">
-                        <i class="fas fa-trash"></i>
-                    </button>
+                      <button onclick="deactivateProduct(${productId})" class="btn btn-danger btn-sm" title="Desactivar producto" style="margin-left: 5px;">
+                          <i class="fas fa-ban"></i>
+                      </button>
                 </td>
             `;
             
@@ -1202,6 +1265,7 @@ function renderProducts() {
     });
     
     console.log('✅ Products rendering completed');
+    renderPagination(totalPages);
 }
 
 // Función loadProducts() mejorada con mejor debugging
@@ -1211,46 +1275,38 @@ async function loadProducts(search = '') {
 
         const query = search ? `?search=${encodeURIComponent(search)}` : '';
         const response = await fetch(`${API_BASE_URL}/products${query}`);
-        
+
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
-        
+
         const data = await response.json();
         console.log('📦 Raw products data from API:', data);
-        console.log('📊 Data type:', typeof data);
-        console.log('📊 Is array:', Array.isArray(data));
-        
         if (!Array.isArray(data)) {
             console.error('❌ Expected array but got:', typeof data);
             throw new Error('Invalid data format: expected array');
         }
-        
+
         products = data;
-        console.log('✅ Products loaded successfully:', products.length, 'items');
-        
+        currentPage = 1;
         renderProducts();
-        
+
     } catch (error) {
         console.error('❌ Error loading products:', error);
-        
-        // Mostrar error en la tabla
+
         const tbody = document.getElementById('productsTable');
         if (tbody) {
             tbody.innerHTML = `
                 <tr>
-                <td colspan="9" style="background: #fef2f2; color: #991b1b; padding: 20px; text-align: center;">
+                    <td colspan="9" style="background: #fef2f2; color: #991b1b; padding: 20px; text-align: center;">
                         <strong>Error cargando productos:</strong><br>
                         ${error.message}<br>
                         <button onclick="loadProducts()" class="btn btn-primary btn-sm" style="margin-top: 10px;">
-                            <i class="fas fa-retry"></i> Reintentar
+                            <i class="fas fa-reply"></i> Reintentar
                         </button>
                     </td>
-                </tr>
-            `;
+                </tr>`;
         }
-        
-        // Mostrar alerta al usuario
         alert('Error cargando productos. Revisa la consola para más detalles.');
     }
 }
