@@ -1,4 +1,4 @@
-// server.js - Backend Node.js con PostgreSQL
+// server.js - Backend Node.js con PostgreSQL CORREGIDO
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -19,6 +19,52 @@ const pool = new Pool({
 // Variable para saber si PostgreSQL está disponible
 let dbConnected = false;
 
+// Datos en memoria como fallback
+let memoryProducts = [
+  {
+    id: 1,
+    name: "Laptop Dell Inspiron",
+    description: "Laptop potente para trabajo y estudio",
+    price: 45000,
+    stock: 5,
+    category: "Electrónicos",
+    branch: "Principal",
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 2,
+    name: "Mouse Inalámbrico",
+    description: "Mouse ergonómico con conectividad Bluetooth",
+    price: 1500,
+    stock: 25,
+    category: "Electrónicos",
+    branch: "Principal",
+    created_at: new Date().toISOString()
+  },
+  {
+    id: 3,
+    name: "Teclado Mecánico",
+    description: "Teclado RGB para gaming",
+    price: 3500,
+    stock: 12,
+    category: "Electrónicos",
+    branch: "Principal",
+    created_at: new Date().toISOString()
+  }
+];
+
+let memoryOrders = [
+  {
+    id: 1,
+    customer_name: "Juan Pérez",
+    products: [{"name": "Laptop Dell Inspiron", "quantity": 1, "price": 45000}],
+    address: "Santo Domingo, República Dominicana",
+    total: 45000,
+    status: "completed",
+    created_at: new Date().toISOString()
+  }
+];
+
 // Middleware básico
 app.use(cors({
   origin: '*',
@@ -35,7 +81,6 @@ app.use((req, res, next) => {
   next();
 });
 
-
 // Test de conexión a PostgreSQL
 async function testDatabaseConnection() {
   try {
@@ -45,15 +90,21 @@ async function testDatabaseConnection() {
     client.release();
     dbConnected = true;
     console.log('✅ PostgreSQL connected successfully:', result.rows[0].now);
+    return true;
   } catch (error) {
     dbConnected = false;
     console.error('❌ PostgreSQL connection failed:', error.message);
-    throw error;
+    console.log('📝 Using in-memory data as fallback');
+    return false;
   }
 }
 
 // Inicializar base de datos PostgreSQL
 async function initDatabase() {
+  if (!dbConnected) {
+    console.log('⚠️ Skipping database initialization - using memory storage');
+    return;
+  }
   
   try {
     console.log('🔄 Initializing PostgreSQL database...');
@@ -114,117 +165,6 @@ async function initDatabase() {
       ON CONFLICT (id) DO NOTHING;
     `);
 
-
-    await pool.query('CREATE INDEX IF NOT EXISTS idx_inventarios_articulo ON inventarios(id_articulo);');
-    await pool.query('CREATE INDEX IF NOT EXISTS idx_inventarios_sucursal ON inventarios(sucursal_id);');
-    await pool.query('CREATE INDEX IF NOT EXISTS idx_inventarios_cantidad ON inventarios(cantidad);');
-    await pool.query('CREATE INDEX IF NOT EXISTS idx_productos_nombre ON productos(nombre);');
-    await pool.query('CREATE INDEX IF NOT EXISTS idx_productos_categoria ON productos(categoria);');
-
-    await pool.query("COMMENT ON TABLE productos IS 'Tabla de productos';");
-    await pool.query("COMMENT ON COLUMN productos.id_articulo IS 'ID único del artículo';");
-    await pool.query("COMMENT ON COLUMN productos.numero_articulo IS 'Código interno del artículo';");
-    await pool.query("COMMENT ON COLUMN productos.costo IS 'Costo del producto en moneda local';");
-    await pool.query("COMMENT ON COLUMN productos.activo IS 'Estado del producto: true=activo, false=inactivo';");
-
-    await pool.query(`
-      CREATE VIEW IF NOT EXISTS vista_inventario_completo AS
-      SELECT 
-          p.id_articulo,
-          p.numero_articulo,
-          p.nombre,
-          p.categoria,
-          p.costo,
-          p.descripcion,
-          s.id as sucursal_id,
-          s.nombre as sucursal_nombre,
-          s.codigo as sucursal_codigo,
-          COALESCE(i.cantidad, 0) as cantidad_actual,
-          i.cantidad_anterior,
-          i.fecha_actualizacion
-      FROM productos p
-      CROSS JOIN sucursales s
-      LEFT JOIN inventarios i ON p.id_articulo = i.id_articulo AND s.id = i.sucursal_id
-      WHERE p.activo = TRUE AND s.activa = TRUE
-      ORDER BY p.nombre, s.nombre;
-    `);
-
-    await pool.query(`
-      CREATE OR REPLACE FUNCTION actualizar_inventario(
-          p_id_articulo INT,
-          p_sucursal_id INT,
-          p_nueva_cantidad INT
-      ) RETURNS VOID AS $$
-      BEGIN
-          INSERT INTO inventarios (id_articulo, sucursal_id, cantidad, cantidad_anterior)
-          VALUES (p_id_articulo, p_sucursal_id, p_nueva_cantidad, 0)
-          ON CONFLICT (id_articulo, sucursal_id) 
-          DO UPDATE SET 
-              cantidad_anterior = inventarios.cantidad,
-              cantidad = p_nueva_cantidad,
-              fecha_actualizacion = CURRENT_TIMESTAMP;
-      END;
-      $$ LANGUAGE plpgsql;
-    `);
-
-    await pool.query(`
-      CREATE VIEW IF NOT EXISTS resumen_inventario_por_producto AS
-      SELECT 
-          p.id_articulo,
-          p.nombre,
-          p.categoria,
-          SUM(COALESCE(i.cantidad, 0)) as total_stock,
-          COUNT(i.sucursal_id) as sucursales_con_stock,
-          STRING_AGG(s.nombre || ': ' || COALESCE(i.cantidad, 0), ', ') as detalle_por_sucursal
-      FROM productos p
-      LEFT JOIN inventarios i ON p.id_articulo = i.id_articulo
-      LEFT JOIN sucursales s ON i.sucursal_id = s.id
-      WHERE p.activo = TRUE
-      GROUP BY p.id_articulo, p.nombre, p.categoria
-      ORDER BY total_stock DESC;
-    `);
-
-    await pool.query(`
-      CREATE VIEW IF NOT EXISTS productos_bajo_stock AS
-      SELECT 
-          p.nombre,
-          s.nombre as sucursal,
-          COALESCE(i.cantidad, 0) as cantidad,
-          CASE 
-              WHEN COALESCE(i.cantidad, 0) = 0 THEN 'SIN STOCK'
-              WHEN COALESCE(i.cantidad, 0) <= 5 THEN 'STOCK BAJO'
-              ELSE 'OK'
-          END as estado_stock
-      FROM productos p
-      CROSS JOIN sucursales s
-      LEFT JOIN inventarios i ON p.id_articulo = i.id_articulo AND s.id = i.sucursal_id
-      WHERE p.activo = TRUE AND s.activa = TRUE
-          AND COALESCE(i.cantidad, 0) <= 10
-      ORDER BY cantidad ASC, p.nombre;
-    `);
-
-    await pool.query(`
-      CREATE VIEW IF NOT EXISTS diferencias_stock_sucursales AS
-      SELECT 
-          p.nombre as producto,
-          MAX(CASE WHEN s.id = 1 THEN COALESCE(i.cantidad, 0) END) as stock_principal,
-          MAX(CASE WHEN s.id = 2 THEN COALESCE(i.cantidad, 0) END) as stock_higuey,
-          ABS(
-              MAX(CASE WHEN s.id = 1 THEN COALESCE(i.cantidad, 0) END) - 
-              MAX(CASE WHEN s.id = 2 THEN COALESCE(i.cantidad, 0) END)
-          ) as diferencia
-      FROM productos p
-      CROSS JOIN sucursales s
-      LEFT JOIN inventarios i ON p.id_articulo = i.id_articulo AND s.id = i.sucursal_id
-      WHERE p.activo = TRUE AND s.activa = TRUE
-      GROUP BY p.id_articulo, p.nombre
-      HAVING ABS(
-          MAX(CASE WHEN s.id = 1 THEN COALESCE(i.cantidad, 0) END) - 
-          MAX(CASE WHEN s.id = 2 THEN COALESCE(i.cantidad, 0) END)
-      ) > 0
-      ORDER BY diferencia DESC;
-    `);
-
     await pool.query(`
       CREATE TABLE IF NOT EXISTS orders (
         id SERIAL PRIMARY KEY,
@@ -249,6 +189,25 @@ async function initDatabase() {
       console.log('✅ Admin user created in PostgreSQL');
     }
 
+    // Insertar productos de ejemplo si no existen
+    const productCount = await pool.query('SELECT COUNT(*) FROM productos');
+    if (parseInt(productCount.rows[0].count) === 0) {
+      console.log('📦 Inserting sample products...');
+      
+      for (const product of memoryProducts) {
+        await pool.query(
+          'INSERT INTO productos (id_articulo, numero_articulo, nombre, categoria, costo, descripcion) VALUES ($1, $2, $3, $4, $5, $6)',
+          [product.id, `ART${product.id}`, product.name, product.category, product.price, product.description]
+        );
+        
+        // Agregar stock
+        await pool.query(
+          'INSERT INTO inventarios (id_articulo, sucursal_id, cantidad) VALUES ($1, 1, $2)',
+          [product.id, product.stock]
+        );
+      }
+      console.log('✅ Sample products inserted');
+    }
 
     console.log('🎉 PostgreSQL database initialized successfully');
   } catch (error) {
@@ -259,7 +218,7 @@ async function initDatabase() {
 
 // Rutas de salud
 app.get('/api/health', async (req, res) => {
-  const dbStatus = dbConnected ? 'PostgreSQL Connected' : 'Not Connected';
+  const dbStatus = dbConnected ? 'PostgreSQL Connected' : 'Memory Storage (PostgreSQL not available)';
 
   let dbTime = null;
   if (dbConnected) {
@@ -276,13 +235,15 @@ app.get('/api/health', async (req, res) => {
     timestamp: new Date().toISOString(),
     database: dbStatus,
     dbTime: dbTime,
-    message: 'Backend funcionando correctamente'
+    message: 'Backend funcionando correctamente',
+    memoryProductsCount: memoryProducts.length,
+    dbConnected: dbConnected
   });
 });
 
 // Rutas de autenticación
 app.post('/api/auth/login', async (req, res) => {
-  console.log('Login attempt:', req.body);
+  console.log('🔐 Login attempt:', req.body);
   
   try {
     const { username, password } = req.body;
@@ -316,46 +277,81 @@ app.post('/api/auth/login', async (req, res) => {
           role: user.rows[0].role
         }
       });
+    } else {
+      // Login simple para modo memoria
+      if (username === 'admin' && password === 'admin123') {
+        console.log('✅ Memory mode login successful');
+        res.json({
+          success: true,
+          user: {
+            id: 1,
+            username: 'admin',
+            role: 'admin'
+          }
+        });
+      } else {
+        return res.status(401).json({ error: 'Credenciales incorrectas' });
+      }
     }
   } catch (error) {
-    console.error('Login error:', error);
+    console.error('❌ Login error:', error);
     res.status(500).json({ error: 'Error interno del servidor' });
   }
 });
 
-
 // Rutas de productos
 app.get('/api/products', async (req, res) => {
   try {
+    console.log('📦 Getting products...');
     const search = req.query.search || '';
+    
     if (dbConnected) {
+      console.log('📊 Using PostgreSQL database');
       const baseQuery = `SELECT p.id_articulo AS id, p.nombre AS name, p.descripcion AS description,
                                 p.costo AS price, COALESCE(SUM(i.cantidad),0) AS stock,
-                                p.categoria AS category, '' AS branch,
+                                p.categoria AS category, 'Principal' AS branch,
                                 p.created_at, p.updated_at
                          FROM productos p
-                         LEFT JOIN inventarios i ON p.id_articulo = i.id_articulo`;
+                         LEFT JOIN inventarios i ON p.id_articulo = i.id_articulo
+                         WHERE p.activo = TRUE`;
+      
+      let result;
       if (search) {
-        const result = await pool.query(
-          baseQuery + ' WHERE p.nombre ILIKE $1 OR p.descripcion ILIKE $1 GROUP BY p.id_articulo ORDER BY p.created_at DESC',
+        result = await pool.query(
+          baseQuery + ' AND (p.nombre ILIKE $1 OR p.descripcion ILIKE $1) GROUP BY p.id_articulo ORDER BY p.created_at DESC',
           [`%${search}%`]
         );
-        res.json(result.rows);
       } else {
-        const result = await pool.query(
+        result = await pool.query(
           baseQuery + ' GROUP BY p.id_articulo ORDER BY p.created_at DESC'
         );
-        res.json(result.rows);
       }
+      
+      console.log(`✅ Found ${result.rows.length} products in database`);
+      res.json(result.rows);
+    } else {
+      console.log('💾 Using memory storage');
+      let filteredProducts = [...memoryProducts];
+      
+      if (search) {
+        filteredProducts = memoryProducts.filter(product => 
+          product.name.toLowerCase().includes(search.toLowerCase()) ||
+          (product.description && product.description.toLowerCase().includes(search.toLowerCase()))
+        );
       }
-    } catch (error) {
-      console.error('Error getting products:', error);
-      res.status(500).json({ error: 'Error obteniendo productos' });
+      
+      console.log(`✅ Found ${filteredProducts.length} products in memory`);
+      res.json(filteredProducts);
     }
-  });
+  } catch (error) {
+    console.error('❌ Error getting products:', error);
+    res.status(500).json({ error: 'Error obteniendo productos: ' + error.message });
+  }
+});
 
 app.post('/api/products', async (req, res) => {
   try {
+    console.log('📝 Creating product:', req.body);
     const { name, description, price, stock, branch, category = '', images = [] } = req.body;
     
     if (!name || !price || !stock || !branch) {
@@ -365,11 +361,18 @@ app.post('/api/products', async (req, res) => {
     if (dbConnected) {
       const numeroArticulo = Date.now().toString();
       const idArticulo = Date.now();
+      
       await pool.query(
         'INSERT INTO productos (id_articulo, numero_articulo, nombre, categoria, costo, descripcion) VALUES ($1, $2, $3, $4, $5, $6)',
         [idArticulo, numeroArticulo, name, category, parseFloat(price), description]
       );
-      await pool.query('SELECT actualizar_inventario($1, 1, $2)', [idArticulo, parseInt(stock)]);
+      
+      // Agregar inventario
+      await pool.query(
+        'INSERT INTO inventarios (id_articulo, sucursal_id, cantidad) VALUES ($1, 1, $2)',
+        [idArticulo, parseInt(stock)]
+      );
+      
       const result = await pool.query(
         `SELECT p.id_articulo AS id, p.nombre AS name, p.descripcion AS description, p.costo AS price,
                 COALESCE(SUM(i.cantidad),0) AS stock, p.categoria AS category,
@@ -380,11 +383,30 @@ app.post('/api/products', async (req, res) => {
          GROUP BY p.id_articulo`,
         [idArticulo]
       );
+      
+      console.log('✅ Product created in database');
       res.json(result.rows[0]);
+    } else {
+      // Crear en memoria
+      const newProduct = {
+        id: Date.now(),
+        name,
+        description: description || '',
+        price: parseFloat(price),
+        stock: parseInt(stock),
+        category,
+        branch,
+        images,
+        created_at: new Date().toISOString()
+      };
+      
+      memoryProducts.push(newProduct);
+      console.log('✅ Product created in memory');
+      res.json(newProduct);
     }
   } catch (error) {
-    console.error('Error creating product:', error);
-    res.status(500).json({ error: 'Error creando producto' });
+    console.error('❌ Error creating product:', error);
+    res.status(500).json({ error: 'Error creando producto: ' + error.message });
   }
 });
 
@@ -393,67 +415,115 @@ app.put('/api/products/:id', async (req, res) => {
     const { id } = req.params;
     const { name, description, price, stock, branch, category = '', images = [] } = req.body;
     
-      if (dbConnected) {
-        const result = await pool.query(
-          'UPDATE productos SET nombre = $1, descripcion = $2, costo = $3, categoria = $4, updated_at = CURRENT_TIMESTAMP WHERE id_articulo = $5 RETURNING id_articulo',
-          [name, description, parseFloat(price), category, id]
-        );
+    console.log(`📝 Updating product ${id}:`, req.body);
+    
+    if (dbConnected) {
+      const result = await pool.query(
+        'UPDATE productos SET nombre = $1, descripcion = $2, costo = $3, categoria = $4, updated_at = CURRENT_TIMESTAMP WHERE id_articulo = $5 RETURNING id_articulo',
+        [name, description, parseFloat(price), category, id]
+      );
 
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Producto no encontrado' });
       }
-        await pool.query('SELECT actualizar_inventario($1, 1, $2)', [id, parseInt(stock)]);
-        const updated = await pool.query(
-          `SELECT p.id_articulo AS id, p.nombre AS name, p.descripcion AS description, p.costo AS price,
-                  COALESCE(SUM(i.cantidad),0) AS stock, p.categoria AS category,
-                  p.created_at, p.updated_at
-           FROM productos p
-           LEFT JOIN inventarios i ON p.id_articulo = i.id_articulo
-           WHERE p.id_articulo = $1
-           GROUP BY p.id_articulo`,
-          [id]
-        );
+      
+      // Actualizar inventario
+      await pool.query(
+        'UPDATE inventarios SET cantidad = $1 WHERE id_articulo = $2 AND sucursal_id = 1',
+        [parseInt(stock), id]
+      );
+      
+      const updated = await pool.query(
+        `SELECT p.id_articulo AS id, p.nombre AS name, p.descripcion AS description, p.costo AS price,
+                COALESCE(SUM(i.cantidad),0) AS stock, p.categoria AS category,
+                p.created_at, p.updated_at
+         FROM productos p
+         LEFT JOIN inventarios i ON p.id_articulo = i.id_articulo
+         WHERE p.id_articulo = $1
+         GROUP BY p.id_articulo`,
+        [id]
+      );
+      
+      console.log('✅ Product updated in database');
       res.json(updated.rows[0]);
+    } else {
+      // Actualizar en memoria
+      const index = memoryProducts.findIndex(p => p.id == id);
+      if (index === -1) {
+        return res.status(404).json({ error: 'Producto no encontrado' });
+      }
+      
+      memoryProducts[index] = {
+        ...memoryProducts[index],
+        name,
+        description,
+        price: parseFloat(price),
+        stock: parseInt(stock),
+        branch,
+        category,
+        images
+      };
+      
+      console.log('✅ Product updated in memory');
+      res.json(memoryProducts[index]);
     }
   } catch (error) {
-    console.error('Error updating product:', error);
-    res.status(500).json({ error: 'Error actualizando producto' });
+    console.error('❌ Error updating product:', error);
+    res.status(500).json({ error: 'Error actualizando producto: ' + error.message });
   }
 });
 
 app.delete('/api/products/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    console.log(`🗑️ Deleting product ${id}`);
     
-      if (dbConnected) {
-        const result = await pool.query('DELETE FROM productos WHERE id_articulo = $1 RETURNING *', [id]);
+    if (dbConnected) {
+      const result = await pool.query('DELETE FROM productos WHERE id_articulo = $1 RETURNING *', [id]);
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Producto no encontrado' });
       }
+      console.log('✅ Product deleted from database');
+    } else {
+      // Eliminar de memoria
+      const index = memoryProducts.findIndex(p => p.id == id);
+      if (index === -1) {
+        return res.status(404).json({ error: 'Producto no encontrado' });
+      }
+      
+      memoryProducts.splice(index, 1);
+      console.log('✅ Product deleted from memory');
     }
 
     res.json({ success: true, message: 'Producto eliminado correctamente' });
   } catch (error) {
-    console.error('Error deleting product:', error);
-    res.status(500).json({ error: 'Error eliminando producto' });
+    console.error('❌ Error deleting product:', error);
+    res.status(500).json({ error: 'Error eliminando producto: ' + error.message });
   }
 });
 
 // Rutas de pedidos
 app.get('/api/orders', async (req, res) => {
   try {
+    console.log('🛒 Getting orders...');
+    
     if (dbConnected) {
       const result = await pool.query('SELECT * FROM orders ORDER BY created_at DESC');
+      console.log(`✅ Found ${result.rows.length} orders in database`);
       res.json(result.rows);
+    } else {
+      console.log(`✅ Found ${memoryOrders.length} orders in memory`);
+      res.json(memoryOrders);
     }
   } catch (error) {
-    console.error('Error getting orders:', error);
-    res.status(500).json({ error: 'Error obteniendo pedidos' });
+    console.error('❌ Error getting orders:', error);
+    res.status(500).json({ error: 'Error obteniendo pedidos: ' + error.message });
   }
 });
 
 app.post('/api/orders', async (req, res) => {
   try {
+    console.log('📝 Creating order:', req.body);
     const { customer_name, products, address, total, status = 'pending' } = req.body;
     
     if (dbConnected) {
@@ -461,35 +531,65 @@ app.post('/api/orders', async (req, res) => {
         'INSERT INTO orders (customer_name, products, address, total, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
         [customer_name, JSON.stringify(products), address, parseFloat(total), status]
       );
+      console.log('✅ Order created in database');
       res.json(result.rows[0]);
+    } else {
+      const newOrder = {
+        id: Date.now(),
+        customer_name,
+        products,
+        address,
+        total: parseFloat(total),
+        status,
+        created_at: new Date().toISOString()
+      };
+      
+      memoryOrders.push(newOrder);
+      console.log('✅ Order created in memory');
+      res.json(newOrder);
     }
   } catch (error) {
-    console.error('Error creating order:', error);
-    res.status(500).json({ error: 'Error creando pedido' });
+    console.error('❌ Error creating order:', error);
+    res.status(500).json({ error: 'Error creando pedido: ' + error.message });
   }
 });
 
 // Ruta de estadísticas
 app.get('/api/stats', async (req, res) => {
   try {
+    console.log('📊 Getting stats...');
+    
     if (dbConnected) {
-        const [productsCount, productsValue, ordersCount, salesTotal] = await Promise.all([
-          pool.query('SELECT COUNT(*) FROM productos'),
-          pool.query('SELECT COALESCE(SUM(p.costo * i.cantidad), 0) as total_value FROM productos p LEFT JOIN inventarios i ON p.id_articulo = i.id_articulo'),
+      const [productsCount, productsValue, ordersCount, salesTotal] = await Promise.all([
+        pool.query('SELECT COUNT(*) FROM productos WHERE activo = TRUE'),
+        pool.query('SELECT COALESCE(SUM(p.costo * i.cantidad), 0) as total_value FROM productos p LEFT JOIN inventarios i ON p.id_articulo = i.id_articulo WHERE p.activo = TRUE'),
         pool.query('SELECT COUNT(*) FROM orders'),
         pool.query('SELECT COALESCE(SUM(total), 0) as total_sales FROM orders')
       ]);
 
-      res.json({
+      const stats = {
         totalProducts: parseInt(productsCount.rows[0].count),
         totalValue: parseFloat(productsValue.rows[0].total_value || 0),
         totalOrders: parseInt(ordersCount.rows[0].count),
         totalSales: parseFloat(salesTotal.rows[0].total_sales || 0)
-      });
+      };
+      
+      console.log('✅ Stats from database:', stats);
+      res.json(stats);
+    } else {
+      const stats = {
+        totalProducts: memoryProducts.length,
+        totalValue: memoryProducts.reduce((sum, p) => sum + (p.price * p.stock), 0),
+        totalOrders: memoryOrders.length,
+        totalSales: memoryOrders.reduce((sum, o) => sum + o.total, 0)
+      };
+      
+      console.log('✅ Stats from memory:', stats);
+      res.json(stats);
     }
   } catch (error) {
-    console.error('Error getting stats:', error);
-    res.status(500).json({ error: 'Error obteniendo estadísticas' });
+    console.error('❌ Error getting stats:', error);
+    res.status(500).json({ error: 'Error obteniendo estadísticas: ' + error.message });
   }
 });
 
@@ -497,7 +597,8 @@ app.get('/api/stats', async (req, res) => {
 app.get('/', (req, res) => {
   res.json({
     message: 'API del Sistema de Gestión de Productos',
-    database: 'PostgreSQL',
+    database: dbConnected ? 'PostgreSQL' : 'Memory Storage',
+    status: 'Running',
     endpoints: [
       'GET /api/health',
       'POST /api/auth/login',
@@ -508,13 +609,14 @@ app.get('/', (req, res) => {
       'GET /api/orders',
       'POST /api/orders',
       'GET /api/stats'
-    ]
+    ],
+    sampleProducts: memoryProducts.length
   });
 });
 
 // Manejo de errores
 app.use((err, req, res, next) => {
-  console.error('Error:', err);
+  console.error('❌ Server Error:', err);
   res.status(500).json({ error: 'Error interno del servidor' });
 });
 
@@ -529,15 +631,19 @@ async function startServer() {
     // Test de conexión a PostgreSQL
     await testDatabaseConnection();
     
-    await initDatabase();
+    // Solo inicializar DB si está conectada
+    if (dbConnected) {
+      await initDatabase();
+    }
     
     app.listen(PORT, '0.0.0.0', () => {
       console.log('=================================');
       console.log('🚀 BACKEND INICIADO');
       console.log(`🌐 Puerto: ${PORT}`);
       console.log(`📍 API: http://localhost:${PORT}/api`);
-      console.log('🗄️ Base de datos: PostgreSQL');
+      console.log(`🗄️ Base de datos: ${dbConnected ? 'PostgreSQL' : 'Memory Storage'}`);
       console.log('🔐 Login: admin / admin123');
+      console.log(`📦 Productos disponibles: ${memoryProducts.length}`);
       console.log('=================================');
     });
   } catch (error) {
@@ -555,4 +661,5 @@ process.on('SIGINT', async () => {
   process.exit(0);
 });
 
+// Iniciar servidor
 startServer().catch(console.error);
