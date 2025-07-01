@@ -994,11 +994,19 @@
             console.log('🚀 Aplicación iniciada');
             console.log('🌐 API URL:', API_BASE_URL);
             
+            // Test de conexión inmediato
+            testAPIConnection();
+            
             // Verificar si hay sesión activa
             const savedUser = localStorage.getItem('currentUser');
             if (savedUser) {
-                currentUser = JSON.parse(savedUser);
-                showMainApp();
+                try {
+                    currentUser = JSON.parse(savedUser);
+                    showMainApp();
+                } catch (e) {
+                    console.warn('Error al cargar sesión guardada:', e);
+                    localStorage.removeItem('currentUser');
+                }
             }
         });
 
@@ -1063,8 +1071,19 @@ Pasos para solucionar:
             e.preventDefault();
             console.log('🔐 Intento de login...');
             
-            const username = document.getElementById('username').value;
-            const password = document.getElementById('password').value;
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value.trim();
+            
+            if (!username || !password) {
+                showError('Por favor ingresa usuario y contraseña');
+                return;
+            }
+
+            // Mostrar estado de carga
+            const submitButton = e.target.querySelector('button[type="submit"]');
+            const originalText = submitButton.innerHTML;
+            submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Conectando...';
+            submitButton.disabled = true;
 
             try {
                 const data = await apiCall('/auth/login', {
@@ -1072,17 +1091,31 @@ Pasos para solucionar:
                     body: JSON.stringify({ username, password })
                 });
 
-                if (data.success) {
+                if (data && data.success) {
                     console.log('✅ Login exitoso');
                     currentUser = data.user;
                     localStorage.setItem('currentUser', JSON.stringify(currentUser));
                     showMainApp();
                 } else {
-                    showError(data.error || 'Credenciales incorrectas');
+                    showError(data?.error || 'Error de autenticación');
                 }
             } catch (error) {
                 console.error('❌ Error en login:', error);
-                showError('Error de conexión. Verifica que el servidor esté funcionando.');
+                
+                let errorMessage = 'Error de conexión';
+                if (error.message.includes('Backend no disponible')) {
+                    errorMessage = 'No se puede conectar al servidor. Verifica que el backend esté ejecutándose.';
+                } else if (error.message.includes('401')) {
+                    errorMessage = 'Credenciales incorrectas';
+                } else {
+                    errorMessage = error.message;
+                }
+                
+                showError(errorMessage);
+            } finally {
+                // Restaurar botón
+                submitButton.innerHTML = originalText;
+                submitButton.disabled = false;
             }
         });
 
