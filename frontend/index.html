@@ -1540,6 +1540,136 @@
             }
         }
 
+        // Stock Management Functions
+        function showStockModal(productId) {
+            console.log(`📦 Mostrando modal de stock para producto ${productId}`);
+            
+            const product = products.find(p => p.id == productId);
+            if (!product) {
+                console.error('❌ Producto no encontrado');
+                return;
+            }
+            
+            currentStockProduct = product;
+            
+            // Actualizar información del producto
+            const productInfo = document.getElementById('stockProductInfo');
+            const price = new Intl.NumberFormat('es-DO', { 
+                style: 'currency', 
+                currency: 'DOP' 
+            }).format(product.price);
+            
+            productInfo.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 15px;">
+                    <div style="width: 60px; height: 60px; background: #e2e8f0; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                        <i class="fas fa-box" style="color: #64748b; font-size: 24px;"></i>
+                    </div>
+                    <div>
+                        <h4 style="margin: 0; color: #1e293b;">${product.name}</h4>
+                        <p style="margin: 5px 0 0 0; color: #64748b;">Precio: ${price} | Categoría: ${product.category || 'Sin categoría'}</p>
+                    </div>
+                </div>
+            `;
+            
+            // Cargar stock actual por sucursal
+            let stockPrincipal = 0;
+            let stockHiguey = 0;
+            
+            if (product.stock_by_branch) {
+                if (typeof product.stock_by_branch === 'string') {
+                    try {
+                        const stockData = JSON.parse(product.stock_by_branch);
+                        stockPrincipal = stockData['PRINCIPAL'] || stockData['Principal'] || 0;
+                        stockHiguey = stockData['SUCURSAL HIGÜEY'] || stockData['Higüey'] || 0;
+                    } catch (e) {
+                        console.warn('Error parsing stock_by_branch:', e);
+                    }
+                } else if (typeof product.stock_by_branch === 'object') {
+                    stockPrincipal = product.stock_by_branch['PRINCIPAL'] || product.stock_by_branch['Principal'] || 0;
+                    stockHiguey = product.stock_by_branch['SUCURSAL HIGÜEY'] || product.stock_by_branch['Higüey'] || 0;
+                }
+            }
+            
+            // Actualizar campos del formulario
+            document.getElementById('stockPrincipal').value = stockPrincipal;
+            document.getElementById('stockHiguey').value = stockHiguey;
+            
+            // Actualizar total
+            updateStockTotal();
+            
+            // Mostrar modal
+            document.getElementById('stockModal').classList.add('show');
+        }
+
+        function closeStockModal() {
+            document.getElementById('stockModal').classList.remove('show');
+            currentStockProduct = null;
+        }
+
+        function updateStockTotal() {
+            const stockPrincipal = parseInt(document.getElementById('stockPrincipal').value) || 0;
+            const stockHiguey = parseInt(document.getElementById('stockHiguey').value) || 0;
+            const total = stockPrincipal + stockHiguey;
+            
+            document.getElementById('stockTotalDisplay').textContent = total.toLocaleString('es-DO');
+        }
+
+        // Agregar event listeners para actualizar el total automáticamente
+        document.addEventListener('DOMContentLoaded', function() {
+            const stockPrincipalInput = document.getElementById('stockPrincipal');
+            const stockHigueyInput = document.getElementById('stockHiguey');
+            
+            if (stockPrincipalInput) {
+                stockPrincipalInput.addEventListener('input', updateStockTotal);
+            }
+            if (stockHigueyInput) {
+                stockHigueyInput.addEventListener('input', updateStockTotal);
+            }
+        });
+
+        async function updateStock() {
+            if (!currentStockProduct) {
+                alert('Error: No hay producto seleccionado');
+                return;
+            }
+            
+            const stockPrincipal = parseInt(document.getElementById('stockPrincipal').value) || 0;
+            const stockHiguey = parseInt(document.getElementById('stockHiguey').value) || 0;
+            
+            try {
+                console.log(`📦 Actualizando stock del producto ${currentStockProduct.id}`);
+                
+                const stockData = {
+                    stock_principal: stockPrincipal,
+                    stock_higuey: stockHiguey
+                };
+                
+                // Llamar a la API para actualizar el stock
+                const updatedProduct = await apiCall(`/products/${currentStockProduct.id}/stock`, {
+                    method: 'PUT',
+                    body: JSON.stringify(stockData)
+                });
+                
+                // Actualizar el producto en la lista local
+                const productIndex = products.findIndex(p => p.id == currentStockProduct.id);
+                if (productIndex !== -1) {
+                    products[productIndex] = updatedProduct;
+                }
+                
+                console.log('✅ Stock actualizado correctamente');
+                closeStockModal();
+                renderProducts(); // Refrescar la tabla
+                await loadStats(); // Actualizar estadísticas
+                
+                // Mostrar mensaje de éxito
+                alert(`Stock actualizado: Principal: ${stockPrincipal}, Higüey: ${stockHiguey}, Total: ${stockPrincipal + stockHiguey}`);
+                
+            } catch (error) {
+                console.error('❌ Error actualizando stock:', error);
+                alert('Error actualizando stock: ' + error.message);
+            }
+        }
+
         // Initialize the application
         console.log('🚀 Sistema de Gestión de Productos y Pedidos inicializado');
         console.log('🌐 API URL:', API_BASE_URL);
