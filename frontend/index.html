@@ -13,24 +13,28 @@
         }
 
         :root {
-            --primary: #3b82f6;
-            --primary-dark: #2563eb;
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
             --secondary: #f8fafc;
-            --success: #10b981;
-            --warning: #f59e0b;
-            --danger: #ef4444;
-            --dark: #1e293b;
-            --light: #f1f5f9;
+            --success: #059669;
+            --warning: #d97706;
+            --danger: #dc2626;
+            --dark: #0f172a;
+            --light: #f8fafc;
             --border: #e2e8f0;
-            --text: #334155;
+            --text: #1e293b;
             --text-light: #64748b;
+            --text-muted: #94a3b8;
+            --background: #ffffff;
+            --surface: #f8fafc;
         }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
+            background: #fafafa;
             min-height: 100vh;
             color: var(--text);
+            line-height: 1.6;
         }
 
         .container {
@@ -95,99 +99,100 @@
         }
 
         .btn {
-            padding: 12px 24px;
-            border: none;
-            border-radius: 10px;
-            font-size: 16px;
-            font-weight: 600;
+            padding: 8px 16px;
+            border: 1px solid transparent;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
             cursor: pointer;
-            transition: all 0.3s ease;
+            transition: all 0.15s ease;
             display: inline-flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
+            text-decoration: none;
         }
 
         .btn-primary {
             background: var(--primary);
             color: white;
-            width: 100%;
-            justify-content: center;
+            border-color: var(--primary);
         }
 
         .btn-primary:hover {
             background: var(--primary-dark);
-            transform: translateY(-2px);
+            border-color: var(--primary-dark);
         }
 
-        .btn-success {
-            background: var(--success);
-            color: white;
+        .btn-sm {
+            padding: 6px 10px;
+            font-size: 12px;
+            min-width: 36px;
         }
 
         .btn-warning {
+            background: var(--background);
+            color: var(--warning);
+            border-color: var(--warning);
+        }
+
+        .btn-warning:hover {
             background: var(--warning);
             color: white;
         }
 
+        .btn-success {
+            background: var(--background);
+            color: var(--success);
+            border-color: var(--success);
+        }
+
+        .btn-success:hover {
+            background: var(--success);
+            color: white;
+        }
+
         .btn-danger {
+            background: var(--background);
+            color: var(--danger);
+            border-color: var(--danger);
+        }
+
+        .btn-danger:hover {
             background: var(--danger);
             color: white;
         }
 
-        .btn-sm {
-            padding: 8px 12px;
-            font-size: 12px;
-            min-width: 40px;
-            transition: all 0.3s ease;
-        }
-
-        .btn-sm:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        }
-
-        .btn-warning {
-            background: linear-gradient(135deg, #f59e0b, #d97706);
-            border: none;
-        }
-
-        .btn-success {
-            background: linear-gradient(135deg, #10b981, #059669);
-            border: none;
-        }
-
-        .btn-danger {
-            background: linear-gradient(135deg, #ef4444, #dc2626);
-            border: none;
-        }
-
         /* Main App Styles */
         .app-container {
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+            background: var(--background);
+            border-radius: 16px;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
             overflow: hidden;
+            border: 1px solid var(--border);
         }
 
         .header {
-            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-            color: white;
-            padding: 20px 30px;
+            background: var(--background);
+            color: var(--text);
+            padding: 24px 32px;
             display: flex;
             justify-content: space-between;
             align-items: center;
+            border-bottom: 1px solid var(--border);
         }
 
         .header h1 {
-            font-size: 1.8rem;
+            font-size: 1.875rem;
+            font-weight: 600;
             display: flex;
             align-items: center;
             gap: 12px;
+            color: var(--dark);
         }
 
         .nav-tabs {
             display: flex;
-            background: var(--secondary);
+            background: var(--surface);
             border-bottom: 1px solid var(--border);
         }
 
@@ -196,24 +201,34 @@
             background: none;
             border: none;
             cursor: pointer;
-            font-size: 16px;
-            font-weight: 600;
+            font-size: 14px;
+            font-weight: 500;
             color: var(--text-light);
-            transition: all 0.3s ease;
+            transition: all 0.2s ease;
             display: flex;
             align-items: center;
             gap: 8px;
+            position: relative;
         }
 
         .nav-tab.active {
-            background: white;
+            background: var(--background);
             color: var(--primary);
-            border-bottom: 3px solid var(--primary);
         }
 
-        .nav-tab:hover {
-            background: white;
-            color: var(--primary);
+        .nav-tab.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: var(--primary);
+        }
+
+        .nav-tab:hover:not(.active) {
+            background: var(--background);
+            color: var(--text);
         }
 
         .tab-content {
@@ -230,22 +245,29 @@
 
         /* Cards */
         .card {
-            background: white;
-            border-radius: 15px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-            margin-bottom: 20px;
+            background: var(--background);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            margin-bottom: 24px;
         }
 
         .card-header {
-            padding: 20px 25px;
+            padding: 20px 24px;
             border-bottom: 1px solid var(--border);
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
 
+        .card-header h3 {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: var(--dark);
+            margin: 0;
+        }
+
         .card-body {
-            padding: 25px;
+            padding: 24px;
         }
 
         /* Tables */
@@ -253,28 +275,26 @@
             overflow-x: auto;
             margin-top: 20px;
             border-radius: 12px;
-            box-shadow: 0 8px 25px -5px rgba(0, 0, 0, 0.1);
+            border: 1px solid var(--border);
         }
 
         .table {
             width: 100%;
             border-collapse: collapse;
-            background: white;
-            border-radius: 12px;
-            overflow: hidden;
+            background: var(--background);
             font-size: 14px;
         }
 
         .table th {
-            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-            color: white;
-            padding: 18px 16px;
+            background: var(--surface);
+            color: var(--text);
+            padding: 16px;
             text-align: center;
             font-weight: 600;
-            font-size: 13px;
+            font-size: 12px;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            border-bottom: none;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid var(--border);
         }
 
         .table td {
@@ -284,13 +304,11 @@
         }
 
         .table tr:hover {
-            background: linear-gradient(90deg, #f8fafc 0%, #f1f5f9 100%);
-            transform: translateY(-1px);
-            transition: all 0.2s ease;
+            background: var(--surface);
         }
 
         .table tr {
-            transition: all 0.2s ease;
+            transition: background-color 0.15s ease;
         }
 
         .table tr:last-child td {
@@ -305,9 +323,9 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.5);
+            background: rgba(15, 23, 42, 0.5);
             z-index: 1000;
-            backdrop-filter: blur(5px);
+            backdrop-filter: blur(4px);
         }
 
         .modal.show {
@@ -317,40 +335,56 @@
         }
 
         .modal-content {
-            background: white;
-            border-radius: 15px;
+            background: var(--background);
+            border-radius: 12px;
             width: 90%;
             max-width: 600px;
             max-height: 90vh;
             overflow-y: auto;
+            border: 1px solid var(--border);
         }
 
         .modal-header {
-            padding: 20px 25px;
+            padding: 20px 24px;
             border-bottom: 1px solid var(--border);
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
 
+        .modal-header h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--dark);
+            margin: 0;
+        }
+
         .modal-body {
-            padding: 25px;
+            padding: 24px;
         }
 
         .modal-footer {
-            padding: 20px 25px;
+            padding: 16px 24px;
             border-top: 1px solid var(--border);
             display: flex;
-            gap: 10px;
+            gap: 12px;
             justify-content: flex-end;
         }
 
         .close {
             background: none;
             border: none;
-            font-size: 24px;
+            font-size: 20px;
             cursor: pointer;
             color: var(--text-light);
+            padding: 4px;
+            border-radius: 4px;
+            transition: all 0.15s ease;
+        }
+
+        .close:hover {
+            background: var(--surface);
+            color: var(--text);
         }
 
         /* Form Styles */
@@ -430,27 +464,44 @@
         }
 
         .stat-card {
-            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-            color: white;
-            padding: 25px;
-            border-radius: 15px;
+            background: var(--background);
+            border: 1px solid var(--border);
+            padding: 24px;
+            border-radius: 12px;
             display: flex;
             align-items: center;
-            gap: 20px;
+            gap: 16px;
+            transition: all 0.2s ease;
+        }
+
+        .stat-card:hover {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+            transform: translateY(-1px);
         }
 
         .stat-icon {
-            font-size: 2.5rem;
-            opacity: 0.8;
+            font-size: 2rem;
+            color: var(--text-light);
+            background: var(--surface);
+            width: 56px;
+            height: 56px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
         .stat-content h3 {
-            font-size: 2rem;
-            margin-bottom: 5px;
+            font-size: 1.875rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+            color: var(--dark);
         }
 
         .stat-content p {
-            opacity: 0.9;
+            color: var(--text-light);
+            font-size: 0.875rem;
+            font-weight: 500;
         }
 
         /* Responsive */
@@ -516,77 +567,77 @@
         }
 
         .badge {
-            padding: 6px 12px;
-            border-radius: 20px;
+            padding: 4px 8px;
+            border-radius: 6px;
             font-size: 11px;
-            font-weight: 700;
+            font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.025em;
             display: inline-block;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
         }
         
         .badge-warning {
-            background: linear-gradient(135deg, #fbbf24, #f59e0b);
-            color: white;
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fde68a;
         }
         
         .badge-success {
-            background: linear-gradient(135deg, #10b981, #059669);
-            color: white;
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #a7f3d0;
         }
         
         .badge-danger {
-            background: linear-gradient(135deg, #ef4444, #dc2626);
-            color: white;
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
         }
         
         .badge-info {
-            background: linear-gradient(135deg, #3b82f6, #2563eb);
-            color: white;
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #bfdbfe;
         }
 
         .pagination {
             display: flex;
             justify-content: center;
             gap: 8px;
-            margin-top: 20px;
-            padding: 20px;
+            margin-top: 24px;
+            padding: 16px;
         }
 
         .pagination button {
-            padding: 10px 16px;
-            border: 2px solid #e2e8f0;
-            border-radius: 10px;
-            background: white;
-            color: #64748b;
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            background: var(--background);
+            color: var(--text-light);
             cursor: pointer;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            min-width: 44px;
+            font-weight: 500;
+            transition: all 0.15s ease;
+            min-width: 40px;
+            font-size: 13px;
         }
 
         .pagination button:hover:not(.disabled) {
-            background: var(--primary);
-            color: white;
+            background: var(--surface);
             border-color: var(--primary);
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
+            color: var(--primary);
         }
 
         .pagination button.disabled {
-            opacity: 0.4;
+            opacity: 0.5;
             cursor: not-allowed;
-            background: #f8fafc;
-            color: #cbd5e1;
-            border-color: #f1f5f9;
+            background: var(--surface);
+            color: var(--text-muted);
         }
 
         .pagination button.active {
-            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            background: var(--primary);
             color: white;
             border-color: var(--primary);
-            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
         }
     </style>
 </head>
@@ -1346,15 +1397,15 @@
             if (!products || products.length === 0) {
                 const row = document.createElement('tr');
                 row.innerHTML = `
-                    <td colspan="8" style="text-align: center; padding: 60px 20px; background: linear-gradient(135deg, #f8fafc, #e2e8f0);">
-                        <div style="display: flex; flex-direction: column; align-items: center; gap: 20px;">
-                            <div style="width: 80px; height: 80px; background: linear-gradient(135deg, #e2e8f0, #cbd5e1); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-                                <i class="fas fa-box-open" style="font-size: 32px; color: #64748b;"></i>
+                    <td colspan="8" style="text-align: center; padding: 60px 20px;">
+                        <div style="display: flex; flex-direction: column; align-items: center; gap: 16px;">
+                            <div style="width: 64px; height: 64px; background: var(--surface); border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border);">
+                                <i class="fas fa-box-open" style="font-size: 24px; color: var(--text-muted);"></i>
                             </div>
                             <div>
-                                <h3 style="color: #475569; margin: 0 0 8px 0;">No hay productos disponibles</h3>
-                                <p style="color: #64748b; margin: 0 0 20px 0;">Comienza agregando tu primer producto al inventario</p>
-                                <button onclick="showProductModal()" class="btn btn-primary" style="padding: 12px 24px; font-size: 16px;">
+                                <h3 style="color: var(--text); margin: 0 0 8px 0; font-weight: 600;">No hay productos disponibles</h3>
+                                <p style="color: var(--text-light); margin: 0 0 20px 0; font-size: 14px;">Comienza agregando tu primer producto al inventario</p>
+                                <button onclick="showProductModal()" class="btn btn-primary">
                                     <i class="fas fa-plus"></i> Crear primer producto
                                 </button>
                             </div>
@@ -1407,7 +1458,7 @@
                     // Formatear stock con detalles por sucursal
                     let stockDisplay = '';
                     if (product.stock_detail) {
-                        // Si hay detalle por sucursal, mostrarlo de forma más estética
+                        // Si hay detalle por sucursal, mostrarlo de forma minimalista
                         const totalStock = product.stock || 0;
                         const stockClass = totalStock > 10 ? 'badge-success' : totalStock > 0 ? 'badge-warning' : 'badge-danger';
                         
@@ -1421,20 +1472,13 @@
                         
                         stockDisplay = `
                             <div style="text-align: center;">
-                                <div class="badge ${stockClass}" style="display: inline-block; margin-bottom: 8px; font-size: 14px; font-weight: bold; padding: 6px 12px;">
-                                    TOTAL: ${totalStock}
+                                <div class="badge ${stockClass}" style="display: inline-block; margin-bottom: 8px; font-weight: 600;">
+                                    ${totalStock} total
                                 </div>
-                                <div style="font-size: 11px; color: #64748b; line-height: 1.3;">
+                                <div style="font-size: 11px; color: var(--text-muted); line-height: 1.4;">
                                     ${stockDetails.split(', ').map(detail => {
                                         const [sucursal, cantidad] = detail.split(': ');
-                                        const cantidadNum = parseInt(cantidad) || 0;
-                                        const colorClass = cantidadNum > 5 ? '#059669' : cantidadNum > 0 ? '#d97706' : '#dc2626';
-                                        return `
-                                            <div style="display: flex; justify-content: space-between; margin: 2px 0; padding: 2px 6px; background: #f8fafc; border-radius: 4px;">
-                                                <span style="font-weight: 500;">${sucursal}:</span>
-                                                <span style="color: ${colorClass}; font-weight: bold;">${cantidad}</span>
-                                            </div>
-                                        `;
+                                        return `<div style="margin: 2px 0;">${sucursal}: ${cantidad}</div>`;
                                     }).join('')}
                                 </div>
                             </div>
@@ -1444,7 +1488,7 @@
                         const stockClass = product.stock > 10 ? 'badge-success' : product.stock > 0 ? 'badge-warning' : 'badge-danger';
                         stockDisplay = `
                             <div style="text-align: center;">
-                                <span class="badge ${stockClass}" style="font-size: 14px; padding: 8px 12px;">
+                                <span class="badge ${stockClass}">
                                     ${product.stock || 0}
                                 </span>
                             </div>
@@ -1452,28 +1496,39 @@
                     }
                     
                     row.innerHTML = `
-                        <td style="text-align: center; font-weight: bold; color: #475569;">${product.id || 'N/A'}</td>
+                        <td style="text-align: center; font-weight: 600; color: var(--text-light); font-size: 13px;">${product.id || 'N/A'}</td>
                         <td style="text-align: center;">
                             <img src="${mainImage}" 
                                  alt="${product.name || 'Producto'}" 
-                                 style="width: 50px; height: 50px; object-fit: cover; border-radius: 8px; border: 2px solid #e2e8f0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"
-                                 onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNTAiIGhlaWdodD0iNTAiIHZpZXdCb3g9IjAgMCA1MCA1MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjUwIiBoZWlnaHQ9IjUwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0yMCAxOEMyNS41MjI4IDE4IDMwIDIyLjQ3NzIgMzAgMjhDMzAgMzMuNTIyOCAyNS41MjI4IDM4IDIwIDM4QzE0LjQ3NzIgMzggMTAgMzMuNTIyOCAxMCAyOEMxMCAyMi40NzcyIDE0LjQ3NzIgMTggMjAgMThaIiBzdHJva2U9IiM5Q0EzQUYiIHN0cm9rZS13aWR0aD0iMiIvPgo8L3N2Zz4K'">
+                                 style="width: 48px; height: 48px; object-fit: cover; border-radius: 8px; border: 1px solid var(--border);"
+                                 onerror="this.src='data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDgiIGhlaWdodD0iNDgiIHZpZXdCb3g9IjAgMCA0OCA0OCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQ4IiBoZWlnaHQ9IjQ4IiBmaWxsPSIjZjhmoZmMiLz4KPGNpcmNsZSBjeD0iMjQiIGN5PSIyNCIgcj0iOCIgZmlsbD0iI2U5ZWNlZiIvPgo8L3N2Zz4K'">
                         </td>
                         <td style="max-width: 200px;">
-                            <div style="font-weight: 600; color: #1e293b; margin-bottom: 4px;">${product.name || 'Sin nombre'}</div>
-                            <div style="font-size: 12px; color: #64748b; font-style: italic;">ID: ${product.id}</div>
+                            <div style="font-weight: 600; color: var(--dark); margin-bottom: 2px; font-size: 14px;">${product.name || 'Sin nombre'}</div>
+                            <div style="font-size: 11px; color: var(--text-muted);">ID: ${product.id}</div>
                         </td>
-                        <td style="color: #475569; max-width: 150px; line-height: 1.4;">${product.description || '-'}</td>
-                        <td style="text-align: center; font-weight: bold; color: #059669; font-size: 16px;">${price}</td>
+                        <td style="color: var(--text-light); max-width: 150px; line-height: 1.4; font-size: 13px;">${product.description || '—'}</td>
+                        <td style="text-align: right; font-weight: 600; color: var(--dark); font-size: 14px;">${price}</td>
                         <td style="min-width: 120px; padding: 12px 8px;">${stockDisplay}</td>
                         <td style="text-align: center;">
-                            <span style="background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">
+                            <span style="background: var(--surface); color: var(--text); padding: 4px 10px; border-radius: 12px; font-size: 11px; font-weight: 500; border: 1px solid var(--border);">
                                 ${product.category || 'Sin categoría'}
                             </span>
                         </td>
                         <td style="text-align: center; padding: 8px;">
                             <div style="display: flex; gap: 4px; justify-content: center; flex-wrap: wrap;">
-                                <button onclick="editProduct(${product.id})" class="btn btn-warning btn-sm" title="Editar producto" style="border-radius: 8px; padding: 6px 8px;">
+                                <button onclick="editProduct(${product.id})" class="btn btn-warning btn-sm" title="Editar producto">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button onclick="showStockModal(${product.id})" class="btn btn-success btn-sm" title="Gestionar stock">
+                                    <i class="fas fa-warehouse"></i>
+                                </button>
+                                <button onclick="deleteProduct(${product.id})" class="btn btn-danger btn-sm" title="Eliminar producto">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </td>
+                    `; style="border-radius: 8px; padding: 6px 8px;">
                                     <i class="fas fa-edit"></i>
                                 </button>
                                 <button onclick="showStockModal(${product.id})" class="btn btn-success btn-sm" title="Gestionar stock" style="border-radius: 8px; padding: 6px 8px;">
@@ -1502,14 +1557,14 @@
             if (tbody) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="8" style="text-align: center; padding: 40px 20px; background: linear-gradient(135deg, #fef2f2, #fee2e2);">
-                            <div style="display: flex; flex-direction: column; align-items: center; gap: 15px;">
-                                <div style="width: 60px; height: 60px; background: #fecaca; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-                                    <i class="fas fa-exclamation-triangle" style="font-size: 24px; color: #dc2626;"></i>
+                        <td colspan="8" style="text-align: center; padding: 40px 20px;">
+                            <div style="display: flex; flex-direction: column; align-items: center; gap: 16px;">
+                                <div style="width: 56px; height: 56px; background: #fee2e2; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 1px solid #fecaca;">
+                                    <i class="fas fa-exclamation-triangle" style="font-size: 20px; color: var(--danger);"></i>
                                 </div>
                                 <div>
-                                    <h4 style="color: #991b1b; margin: 0 0 8px 0;">Error cargando productos</h4>
-                                    <p style="color: #b91c1c; margin: 0 0 15px 0; font-size: 14px;">${message}</p>
+                                    <h4 style="color: var(--danger); margin: 0 0 8px 0; font-weight: 600;">Error cargando productos</h4>
+                                    <p style="color: var(--text-light); margin: 0 0 16px 0; font-size: 14px;">${message}</p>
                                     <button onclick="loadProducts()" class="btn btn-primary">
                                         <i class="fas fa-redo"></i> Reintentar
                                     </button>
