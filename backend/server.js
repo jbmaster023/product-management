@@ -36,11 +36,6 @@ app.use((req, res, next) => {
 });
 
 // Datos de fallback en memoria
-let memoryCategories = [
-  { id: 1, name: 'General' },
-  { id: 2, name: 'Electrónica' },
-  { id: 3, name: 'Hogar' }
-];
 
 let memoryProducts = [
   {
@@ -135,60 +130,160 @@ async function initDatabase() {
     `);
 
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS categories (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(100) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS products (
-        id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
-        description TEXT,
-        price DECIMAL(10,2) NOT NULL,
-        stock INTEGER NOT NULL,
-        branch VARCHAR(100) NOT NULL,
-        category_id INTEGER REFERENCES categories(id),
-        images JSONB DEFAULT '[]',
+      CREATE TABLE IF NOT EXISTS productos (
+        id_articulo INT PRIMARY KEY,
+        numero_articulo VARCHAR(50),
+        nombre VARCHAR(255) NOT NULL,
+        categoria VARCHAR(100),
+        costo DECIMAL(10,2) DEFAULT 0,
+        descripcion TEXT,
+        activo BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
 
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS productos (
-        id SERIAL PRIMARY KEY,
-        numero_articulo VARCHAR(255),
-        nombre VARCHAR(255) NOT NULL,
-        categoria VARCHAR(255),
-        costo DECIMAL(10,2) DEFAULT 0,
-        cantidad INTEGER DEFAULT 0,
-        descripcion TEXT,
-        id_articulo INTEGER UNIQUE NOT NULL,
-        activo BOOLEAN DEFAULT true,
-        imagen_url VARCHAR(500),
-        imagen_base64 TEXT,
-        imagen_metadata JSONB,
-        created_at TIMESTAMP DEFAULT NOW(),
-        updated_at TIMESTAMP DEFAULT NOW()
+      CREATE TABLE IF NOT EXISTS sucursales (
+        id INT PRIMARY KEY,
+        nombre VARCHAR(100) NOT NULL,
+        codigo VARCHAR(20),
+        activa BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
 
-    await pool.query('CREATE INDEX IF NOT EXISTS idx_productos_id_articulo ON productos(id_articulo);');
-    await pool.query('CREATE INDEX IF NOT EXISTS idx_productos_categoria ON productos(categoria);');
-    await pool.query('CREATE INDEX IF NOT EXISTS idx_productos_numero_articulo ON productos(numero_articulo);');
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS inventarios (
+        id SERIAL PRIMARY KEY,
+        id_articulo INT NOT NULL,
+        sucursal_id INT NOT NULL,
+        cantidad INT DEFAULT 0,
+        cantidad_anterior INT DEFAULT 0,
+        fecha_actualizacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (id_articulo) REFERENCES productos(id_articulo) ON DELETE CASCADE,
+        FOREIGN KEY (sucursal_id) REFERENCES sucursales(id) ON DELETE CASCADE,
+        UNIQUE(id_articulo, sucursal_id)
+      );
+    `);
 
-    await pool.query("COMMENT ON TABLE productos IS 'Tabla de productos sincronizada desde WilmaxPOS';");
-    await pool.query("COMMENT ON COLUMN productos.id_articulo IS 'ID único del artículo desde WilmaxPOS (clave para upsert)';");
-    await pool.query("COMMENT ON COLUMN productos.numero_articulo IS 'Código de artículo del sistema WilmaxPOS';");
+    await pool.query(`
+      INSERT INTO sucursales (id, nombre, codigo) VALUES
+        (1, 'PRINCIPAL', 'PRIN'),
+        (2, 'SUCURSAL HIGÜEY', 'HIG')
+      ON CONFLICT (id) DO NOTHING;
+    `);
+
+
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_inventarios_articulo ON inventarios(id_articulo);');
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_inventarios_sucursal ON inventarios(sucursal_id);');
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_inventarios_cantidad ON inventarios(cantidad);');
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_productos_nombre ON productos(nombre);');
+    await pool.query('CREATE INDEX IF NOT EXISTS idx_productos_categoria ON productos(categoria);');
+
+    await pool.query("COMMENT ON TABLE productos IS 'Tabla de productos';");
+    await pool.query("COMMENT ON COLUMN productos.id_articulo IS 'ID único del artículo';");
+    await pool.query("COMMENT ON COLUMN productos.numero_articulo IS 'Código interno del artículo';");
     await pool.query("COMMENT ON COLUMN productos.costo IS 'Costo del producto en moneda local';");
-    await pool.query("COMMENT ON COLUMN productos.cantidad IS 'Stock disponible del producto';");
     await pool.query("COMMENT ON COLUMN productos.activo IS 'Estado del producto: true=activo, false=inactivo';");
-    await pool.query("COMMENT ON COLUMN productos.imagen_url IS 'URL pública de la imagen del producto (recomendado para WebSocket)';");
-    await pool.query("COMMENT ON COLUMN productos.imagen_base64 IS 'Imagen en formato base64 (alternativa para casos específicos)';");
-    await pool.query("COMMENT ON COLUMN productos.imagen_metadata IS 'Metadatos de la imagen: tamaño, formato, dimensiones, etc.';");
+
+    await pool.query(`
+      CREATE VIEW IF NOT EXISTS vista_inventario_completo AS
+      SELECT 
+          p.id_articulo,
+          p.numero_articulo,
+          p.nombre,
+          p.categoria,
+          p.costo,
+          p.descripcion,
+          s.id as sucursal_id,
+          s.nombre as sucursal_nombre,
+          s.codigo as sucursal_codigo,
+          COALESCE(i.cantidad, 0) as cantidad_actual,
+          i.cantidad_anterior,
+          i.fecha_actualizacion
+      FROM productos p
+      CROSS JOIN sucursales s
+      LEFT JOIN inventarios i ON p.id_articulo = i.id_articulo AND s.id = i.sucursal_id
+      WHERE p.activo = TRUE AND s.activa = TRUE
+      ORDER BY p.nombre, s.nombre;
+    `);
+
+    await pool.query(`
+      CREATE OR REPLACE FUNCTION actualizar_inventario(
+          p_id_articulo INT,
+          p_sucursal_id INT,
+          p_nueva_cantidad INT
+      ) RETURNS VOID AS $$
+      BEGIN
+          INSERT INTO inventarios (id_articulo, sucursal_id, cantidad, cantidad_anterior)
+          VALUES (p_id_articulo, p_sucursal_id, p_nueva_cantidad, 0)
+          ON CONFLICT (id_articulo, sucursal_id) 
+          DO UPDATE SET 
+              cantidad_anterior = inventarios.cantidad,
+              cantidad = p_nueva_cantidad,
+              fecha_actualizacion = CURRENT_TIMESTAMP;
+      END;
+      $$ LANGUAGE plpgsql;
+    `);
+
+    await pool.query(`
+      CREATE VIEW IF NOT EXISTS resumen_inventario_por_producto AS
+      SELECT 
+          p.id_articulo,
+          p.nombre,
+          p.categoria,
+          SUM(COALESCE(i.cantidad, 0)) as total_stock,
+          COUNT(i.sucursal_id) as sucursales_con_stock,
+          STRING_AGG(s.nombre || ': ' || COALESCE(i.cantidad, 0), ', ') as detalle_por_sucursal
+      FROM productos p
+      LEFT JOIN inventarios i ON p.id_articulo = i.id_articulo
+      LEFT JOIN sucursales s ON i.sucursal_id = s.id
+      WHERE p.activo = TRUE
+      GROUP BY p.id_articulo, p.nombre, p.categoria
+      ORDER BY total_stock DESC;
+    `);
+
+    await pool.query(`
+      CREATE VIEW IF NOT EXISTS productos_bajo_stock AS
+      SELECT 
+          p.nombre,
+          s.nombre as sucursal,
+          COALESCE(i.cantidad, 0) as cantidad,
+          CASE 
+              WHEN COALESCE(i.cantidad, 0) = 0 THEN 'SIN STOCK'
+              WHEN COALESCE(i.cantidad, 0) <= 5 THEN 'STOCK BAJO'
+              ELSE 'OK'
+          END as estado_stock
+      FROM productos p
+      CROSS JOIN sucursales s
+      LEFT JOIN inventarios i ON p.id_articulo = i.id_articulo AND s.id = i.sucursal_id
+      WHERE p.activo = TRUE AND s.activa = TRUE
+          AND COALESCE(i.cantidad, 0) <= 10
+      ORDER BY cantidad ASC, p.nombre;
+    `);
+
+    await pool.query(`
+      CREATE VIEW IF NOT EXISTS diferencias_stock_sucursales AS
+      SELECT 
+          p.nombre as producto,
+          MAX(CASE WHEN s.id = 1 THEN COALESCE(i.cantidad, 0) END) as stock_principal,
+          MAX(CASE WHEN s.id = 2 THEN COALESCE(i.cantidad, 0) END) as stock_higuey,
+          ABS(
+              MAX(CASE WHEN s.id = 1 THEN COALESCE(i.cantidad, 0) END) - 
+              MAX(CASE WHEN s.id = 2 THEN COALESCE(i.cantidad, 0) END)
+          ) as diferencia
+      FROM productos p
+      CROSS JOIN sucursales s
+      LEFT JOIN inventarios i ON p.id_articulo = i.id_articulo AND s.id = i.sucursal_id
+      WHERE p.activo = TRUE AND s.activa = TRUE
+      GROUP BY p.id_articulo, p.nombre
+      HAVING ABS(
+          MAX(CASE WHEN s.id = 1 THEN COALESCE(i.cantidad, 0) END) - 
+          MAX(CASE WHEN s.id = 2 THEN COALESCE(i.cantidad, 0) END)
+      ) > 0
+      ORDER BY diferencia DESC;
+    `);
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS orders (
@@ -216,21 +311,17 @@ async function initDatabase() {
 
     // Migrar datos de memoria a PostgreSQL si están vacías las tablas
     const productsCount = await pool.query('SELECT COUNT(*) FROM productos');
-    const categoriesCount = await pool.query('SELECT COUNT(*) FROM categories');
-    if (parseInt(productsCount.rows[0].count) === 0 && parseInt(categoriesCount.rows[0].count) === 0) {
+    if (parseInt(productsCount.rows[0].count) === 0) {
       console.log('📦 Migrating memory data to PostgreSQL...');
-      
-      for (const category of memoryCategories) {
-        await pool.query(
-          'INSERT INTO categories (name) VALUES ($1)',
-          [category.name]
-        );
-      }
 
       for (const product of memoryProducts) {
         await pool.query(
-          'INSERT INTO productos (numero_articulo, nombre, categoria, costo, cantidad, descripcion, id_articulo, imagen_metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
-          [String(product.id), product.name, product.category, product.price, product.stock, product.description, product.id, product.images]
+          'INSERT INTO productos (id_articulo, numero_articulo, nombre, categoria, costo, descripcion) VALUES ($1, $2, $3, $4, $5, $6)',
+          [product.id, String(product.id), product.name, product.category, product.price, product.description]
+        );
+        await pool.query(
+          'INSERT INTO inventarios (id_articulo, sucursal_id, cantidad) VALUES ($1, 1, $2)',
+          [product.id, product.stock]
         );
       }
       
@@ -332,66 +423,27 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-// Rutas de categorías
-app.get('/api/categories', async (req, res) => {
-  try {
-    if (dbConnected) {
-      const result = await pool.query('SELECT * FROM categories ORDER BY name');
-      res.json(result.rows);
-    } else {
-      res.json(memoryCategories);
-    }
-  } catch (error) {
-    console.error('Error getting categories:', error);
-    res.json(memoryCategories);
-  }
-});
-
-app.post('/api/categories', async (req, res) => {
-  try {
-    const { name } = req.body;
-    if (!name) {
-      return res.status(400).json({ error: 'Nombre requerido' });
-    }
-
-    if (dbConnected) {
-      const result = await pool.query(
-        'INSERT INTO categories (name) VALUES ($1) RETURNING *',
-        [name]
-      );
-      res.json(result.rows[0]);
-    } else {
-      const newCategory = { id: Date.now(), name };
-      memoryCategories.push(newCategory);
-      res.json(newCategory);
-    }
-  } catch (error) {
-    console.error('Error creating category:', error);
-    res.status(500).json({ error: 'Error creando categoría' });
-  }
-});
 
 // Rutas de productos
 app.get('/api/products', async (req, res) => {
   try {
     const search = req.query.search || '';
     if (dbConnected) {
+      const baseQuery = `SELECT p.id_articulo AS id, p.nombre AS name, p.descripcion AS description,
+                                p.costo AS price, COALESCE(SUM(i.cantidad),0) AS stock,
+                                p.categoria AS category, '' AS branch,
+                                p.created_at, p.updated_at
+                         FROM productos p
+                         LEFT JOIN inventarios i ON p.id_articulo = i.id_articulo`;
       if (search) {
         const result = await pool.query(
-          `SELECT p.id, p.nombre AS name, p.descripcion AS description, p.costo AS price, p.cantidad AS stock,
-                  p.categoria AS category, '' AS branch, p.imagen_metadata AS images, p.created_at, p.updated_at
-           FROM productos p
-           WHERE p.nombre ILIKE $1 OR p.descripcion ILIKE $1
-           ORDER BY p.created_at DESC`,
+          baseQuery + ' WHERE p.nombre ILIKE $1 OR p.descripcion ILIKE $1 GROUP BY p.id_articulo ORDER BY p.created_at DESC',
           [`%${search}%`]
         );
         res.json(result.rows);
       } else {
         const result = await pool.query(
-          `SELECT p.id, p.nombre AS name, p.descripcion AS description, p.costo AS price, p.cantidad AS stock,
-                  p.categoria AS category, '' AS branch, p.imagen_metadata AS images, p.created_at, p.updated_at
-           FROM productos p
-           ORDER BY p.created_at DESC`
+          baseQuery + ' GROUP BY p.id_articulo ORDER BY p.created_at DESC'
         );
         res.json(result.rows);
       }
@@ -423,16 +475,20 @@ app.post('/api/products', async (req, res) => {
       if (dbConnected) {
         const numeroArticulo = Date.now().toString();
         const idArticulo = Date.now();
-        const insert = await pool.query(
-          'INSERT INTO productos (numero_articulo, nombre, categoria, costo, cantidad, descripcion, id_articulo, imagen_metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id',
-          [numeroArticulo, name, category, parseFloat(price), parseInt(stock), description, idArticulo, JSON.stringify(images)]
+        await pool.query(
+          'INSERT INTO productos (id_articulo, numero_articulo, nombre, categoria, costo, descripcion) VALUES ($1, $2, $3, $4, $5, $6)',
+          [idArticulo, numeroArticulo, name, category, parseFloat(price), description]
         );
+        await pool.query('SELECT actualizar_inventario($1, 1, $2)', [idArticulo, parseInt(stock)]);
         const result = await pool.query(
-          `SELECT p.id, p.nombre AS name, p.descripcion AS description, p.costo AS price, p.cantidad AS stock,
-                  p.categoria AS category, '' AS branch, p.imagen_metadata AS images, p.created_at, p.updated_at
+          `SELECT p.id_articulo AS id, p.nombre AS name, p.descripcion AS description, p.costo AS price,
+                  COALESCE(SUM(i.cantidad),0) AS stock, p.categoria AS category,
+                  p.created_at, p.updated_at
            FROM productos p
-           WHERE p.id = $1`,
-          [insert.rows[0].id]
+           LEFT JOIN inventarios i ON p.id_articulo = i.id_articulo
+           WHERE p.id_articulo = $1
+           GROUP BY p.id_articulo`,
+          [idArticulo]
         );
         res.json(result.rows[0]);
     } else {
@@ -463,18 +519,22 @@ app.put('/api/products/:id', async (req, res) => {
     
       if (dbConnected) {
         const result = await pool.query(
-          'UPDATE productos SET nombre = $1, descripcion = $2, costo = $3, cantidad = $4, categoria = $5, imagen_metadata = $6, updated_at = CURRENT_TIMESTAMP WHERE id = $7 RETURNING id',
-          [name, description, parseFloat(price), parseInt(stock), category, JSON.stringify(images), id]
+          'UPDATE productos SET nombre = $1, descripcion = $2, costo = $3, categoria = $4, updated_at = CURRENT_TIMESTAMP WHERE id_articulo = $5 RETURNING id_articulo',
+          [name, description, parseFloat(price), category, id]
         );
 
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Producto no encontrado' });
       }
+        await pool.query('SELECT actualizar_inventario($1, 1, $2)', [id, parseInt(stock)]);
         const updated = await pool.query(
-          `SELECT p.id, p.nombre AS name, p.descripcion AS description, p.costo AS price, p.cantidad AS stock,
-                  p.categoria AS category, '' AS branch, p.imagen_metadata AS images, p.created_at, p.updated_at
+          `SELECT p.id_articulo AS id, p.nombre AS name, p.descripcion AS description, p.costo AS price,
+                  COALESCE(SUM(i.cantidad),0) AS stock, p.categoria AS category,
+                  p.created_at, p.updated_at
            FROM productos p
-           WHERE p.id = $1`,
+           LEFT JOIN inventarios i ON p.id_articulo = i.id_articulo
+           WHERE p.id_articulo = $1
+           GROUP BY p.id_articulo`,
           [id]
         );
       res.json(updated.rows[0]);
@@ -507,7 +567,7 @@ app.delete('/api/products/:id', async (req, res) => {
     const { id } = req.params;
     
       if (dbConnected) {
-        const result = await pool.query('DELETE FROM productos WHERE id = $1 RETURNING *', [id]);
+        const result = await pool.query('DELETE FROM productos WHERE id_articulo = $1 RETURNING *', [id]);
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Producto no encontrado' });
       }
@@ -576,7 +636,7 @@ app.get('/api/stats', async (req, res) => {
     if (dbConnected) {
         const [productsCount, productsValue, ordersCount, salesTotal] = await Promise.all([
           pool.query('SELECT COUNT(*) FROM productos'),
-          pool.query('SELECT COALESCE(SUM(costo * cantidad), 0) as total_value FROM productos'),
+          pool.query('SELECT COALESCE(SUM(p.costo * i.cantidad), 0) as total_value FROM productos p LEFT JOIN inventarios i ON p.id_articulo = i.id_articulo'),
         pool.query('SELECT COUNT(*) FROM orders'),
         pool.query('SELECT COALESCE(SUM(total), 0) as total_sales FROM orders')
       ]);
@@ -618,8 +678,6 @@ app.get('/', (req, res) => {
       'POST /api/products',
       'PUT /api/products/:id',
       'DELETE /api/products/:id',
-      'GET /api/categories',
-      'POST /api/categories',
       'GET /api/orders',
       'POST /api/orders',
       'GET /api/stats'
