@@ -950,14 +950,24 @@
             // Hide all tabs
             const tabs = document.querySelectorAll('.tab-pane');
             tabs.forEach(tab => tab.classList.remove('active'));
-            
+
             // Hide all nav tabs
             const navTabs = document.querySelectorAll('.nav-tab');
             navTabs.forEach(tab => tab.classList.remove('active'));
-            
+
             // Show selected tab
             document.getElementById(tabName).classList.add('active');
             event.target.classList.add('active');
+
+            // Reload data when switching tabs
+            if (tabName === 'products') {
+                loadProducts();
+            } else if (tabName === 'orders') {
+                loadOrders();
+                loadStats();
+            } else if (tabName === 'settings') {
+                loadCategories();
+            }
         }
 
         // Product Management
