@@ -26,7 +26,9 @@ let memoryProducts = [
     name: "Laptop Dell Inspiron",
     description: "Laptop potente para trabajo y estudio",
     price: 45000,
-    stock: 5,
+    stock: 8,
+    stock_detail: "Principal: 5, Higüey: 3",
+    stock_by_branch: { "Principal": 5, "Higüey": 3 },
     category: "Electrónicos",
     branch: "Principal",
     created_at: new Date().toISOString()
@@ -36,7 +38,9 @@ let memoryProducts = [
     name: "Mouse Inalámbrico",
     description: "Mouse ergonómico con conectividad Bluetooth",
     price: 1500,
-    stock: 25,
+    stock: 30,
+    stock_detail: "Principal: 18, Higüey: 12",
+    stock_by_branch: { "Principal": 18, "Higüey": 12 },
     category: "Electrónicos",
     branch: "Principal",
     created_at: new Date().toISOString()
@@ -46,7 +50,9 @@ let memoryProducts = [
     name: "Teclado Mecánico",
     description: "Teclado RGB para gaming",
     price: 3500,
-    stock: 12,
+    stock: 15,
+    stock_detail: "Principal: 8, Higüey: 7",
+    stock_by_branch: { "Principal": 8, "Higüey": 7 },
     category: "Electrónicos",
     branch: "Principal",
     created_at: new Date().toISOString()
@@ -200,13 +206,18 @@ async function initDatabase() {
           [product.id, `ART${product.id}`, product.name, product.category, product.price, product.description]
         );
         
-        // Agregar stock
-        await pool.query(
-          'INSERT INTO inventarios (id_articulo, sucursal_id, cantidad) VALUES ($1, 1, $2)',
-          [product.id, product.stock]
-        );
+        // Agregar stock en ambas sucursales
+        if (product.stock_by_branch) {
+          for (const [sucursal, cantidad] of Object.entries(product.stock_by_branch)) {
+            const sucursalId = sucursal === 'Principal' ? 1 : 2;
+            await pool.query(
+              'INSERT INTO inventarios (id_articulo, sucursal_id, cantidad) VALUES ($1, $2, $3)',
+              [product.id, sucursalId, cantidad]
+            );
+          }
+        }
       }
-      console.log('✅ Sample products inserted');
+      console.log('✅ Sample products inserted with branch inventory');
     }
 
     console.log('🎉 PostgreSQL database initialized successfully');
@@ -307,23 +318,37 @@ app.get('/api/products', async (req, res) => {
     
     if (dbConnected) {
       console.log('📊 Using PostgreSQL database');
-      const baseQuery = `SELECT p.id_articulo AS id, p.nombre AS name, p.descripcion AS description,
-                                p.costo AS price, COALESCE(SUM(i.cantidad),0) AS stock,
-                                p.categoria AS category, 'Principal' AS branch,
-                                p.created_at, p.updated_at
+      const baseQuery = `SELECT 
+                          p.id_articulo AS id, 
+                          p.nombre AS name, 
+                          p.descripcion AS description,
+                          p.costo AS price, 
+                          p.categoria AS category, 
+                          'Principal' AS branch,
+                          COALESCE(SUM(i.cantidad), 0) AS stock,
+                          STRING_AGG(
+                            s.nombre || ': ' || COALESCE(i.cantidad, 0), 
+                            ', ' ORDER BY s.nombre
+                          ) AS stock_detail,
+                          JSON_OBJECT_AGG(
+                            s.nombre, COALESCE(i.cantidad, 0)
+                          ) AS stock_by_branch,
+                          p.created_at, 
+                          p.updated_at
                          FROM productos p
                          LEFT JOIN inventarios i ON p.id_articulo = i.id_articulo
+                         LEFT JOIN sucursales s ON i.sucursal_id = s.id
                          WHERE p.activo = TRUE`;
       
       let result;
       if (search) {
         result = await pool.query(
-          baseQuery + ' AND (p.nombre ILIKE $1 OR p.descripcion ILIKE $1) GROUP BY p.id_articulo ORDER BY p.created_at DESC',
+          baseQuery + ' AND (p.nombre ILIKE $1 OR p.descripcion ILIKE $1) GROUP BY p.id_articulo, p.nombre, p.descripcion, p.costo, p.categoria, p.created_at, p.updated_at ORDER BY p.created_at DESC',
           [`%${search}%`]
         );
       } else {
         result = await pool.query(
-          baseQuery + ' GROUP BY p.id_articulo ORDER BY p.created_at DESC'
+          baseQuery + ' GROUP BY p.id_articulo, p.nombre, p.descripcion, p.costo, p.categoria, p.created_at, p.updated_at ORDER BY p.created_at DESC'
         );
       }
       
@@ -367,20 +392,36 @@ app.post('/api/products', async (req, res) => {
         [idArticulo, numeroArticulo, name, category, parseFloat(price), description]
       );
       
-      // Agregar inventario
+      // Agregar inventario en la sucursal seleccionada
+      const sucursalId = branch === 'Principal' ? 1 : 2;
       await pool.query(
-        'INSERT INTO inventarios (id_articulo, sucursal_id, cantidad) VALUES ($1, 1, $2)',
-        [idArticulo, parseInt(stock)]
+        'INSERT INTO inventarios (id_articulo, sucursal_id, cantidad) VALUES ($1, $2, $3)',
+        [idArticulo, sucursalId, parseInt(stock)]
       );
       
+      // Obtener el producto completo con información de sucursales
       const result = await pool.query(
-        `SELECT p.id_articulo AS id, p.nombre AS name, p.descripcion AS description, p.costo AS price,
-                COALESCE(SUM(i.cantidad),0) AS stock, p.categoria AS category,
-                p.created_at, p.updated_at
+        `SELECT 
+          p.id_articulo AS id, 
+          p.nombre AS name, 
+          p.descripcion AS description, 
+          p.costo AS price,
+          p.categoria AS category,
+          COALESCE(SUM(i.cantidad), 0) AS stock,
+          STRING_AGG(
+            s.nombre || ': ' || COALESCE(i.cantidad, 0), 
+            ', ' ORDER BY s.nombre
+          ) AS stock_detail,
+          JSON_OBJECT_AGG(
+            s.nombre, COALESCE(i.cantidad, 0)
+          ) AS stock_by_branch,
+          p.created_at, 
+          p.updated_at
          FROM productos p
          LEFT JOIN inventarios i ON p.id_articulo = i.id_articulo
+         LEFT JOIN sucursales s ON i.sucursal_id = s.id
          WHERE p.id_articulo = $1
-         GROUP BY p.id_articulo`,
+         GROUP BY p.id_articulo, p.nombre, p.descripcion, p.costo, p.categoria, p.created_at, p.updated_at`,
         [idArticulo]
       );
       
@@ -394,6 +435,8 @@ app.post('/api/products', async (req, res) => {
         description: description || '',
         price: parseFloat(price),
         stock: parseInt(stock),
+        stock_detail: `${branch}: ${stock}`,
+        stock_by_branch: { [branch]: parseInt(stock) },
         category,
         branch,
         images,
