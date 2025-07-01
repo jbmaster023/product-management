@@ -782,6 +782,61 @@
         </div>
     </div>
 
+    <!-- Stock Management Modal -->
+    <div id="stockModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="stockModalTitle">Gestionar Stock por Sucursal</h3>
+                <button class="close" onclick="closeStockModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="stockProductInfo" style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                    <!-- Información del producto se carga aquí -->
+                </div>
+                
+                <div class="stats-grid" style="margin-bottom: 20px;">
+                    <div class="stat-card" style="background: linear-gradient(135deg, #059669, #047857);">
+                        <div class="stat-icon">
+                            <i class="fas fa-cubes"></i>
+                        </div>
+                        <div class="stat-content">
+                            <h3 id="stockTotalDisplay">0</h3>
+                            <p>Stock Total</p>
+                        </div>
+                    </div>
+                </div>
+
+                <form id="stockForm">
+                    <div class="row">
+                        <div class="col">
+                            <div class="form-group">
+                                <label>Stock Sucursal Principal</label>
+                                <input type="number" id="stockPrincipal" class="form-control" min="0" value="0">
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="form-group">
+                                <label>Stock Sucursal Higüey</label>
+                                <input type="number" id="stockHiguey" class="form-control" min="0" value="0">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div style="background: #eff6ff; padding: 15px; border-radius: 8px; border-left: 4px solid #3b82f6;">
+                        <h4 style="color: #1e40af; margin-bottom: 10px;"><i class="fas fa-info-circle"></i> Información</h4>
+                        <p style="color: #1e40af; margin: 0;">Los cambios se aplicarán inmediatamente al sistema de inventario.</p>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button onclick="closeStockModal()" class="btn" style="background: var(--text-light); color: white;">Cancelar</button>
+                <button onclick="updateStock()" class="btn btn-primary">
+                    <i class="fas fa-save"></i> Actualizar Stock
+                </button>
+            </div>
+        </div>
+    </div>
+
     <script>
         // Configuración de la API
         const API_BASE_URL = `http://${window.location.hostname}:3053/api`;
@@ -790,6 +845,7 @@
         let products = [];
         let orders = [];
         let currentProduct = null;
+        let currentStockProduct = null;
         let productImages = [];
         let currentUser = null;
         let currentPage = 1;
@@ -1270,6 +1326,32 @@
                             currency: 'DOP' 
                         }).format(product.price) : 'RD$0.00';
                     
+                    // Formatear stock con detalles por sucursal
+                    let stockDisplay = '';
+                    if (product.stock_detail) {
+                        // Si hay detalle por sucursal, mostrarlo
+                        const totalStock = product.stock || 0;
+                        const stockClass = totalStock > 10 ? 'badge-success' : totalStock > 0 ? 'badge-warning' : 'badge-danger';
+                        stockDisplay = `
+                            <div>
+                                <span class="badge ${stockClass}" style="display: block; margin-bottom: 5px;">
+                                    Total: ${totalStock}
+                                </span>
+                                <small style="color: #666; font-size: 11px; line-height: 1.2;">
+                                    ${product.stock_detail}
+                                </small>
+                            </div>
+                        `;
+                    } else {
+                        // Formato simple si no hay detalles
+                        const stockClass = product.stock > 10 ? 'badge-success' : product.stock > 0 ? 'badge-warning' : 'badge-danger';
+                        stockDisplay = `
+                            <span class="badge ${stockClass}">
+                                ${product.stock || 0}
+                            </span>
+                        `;
+                    }
+                    
                     row.innerHTML = `
                         <td>${product.id || 'N/A'}</td>
                         <td>
@@ -1281,15 +1363,14 @@
                         <td><strong>${product.name || 'Sin nombre'}</strong></td>
                         <td>${product.description || '-'}</td>
                         <td>${price}</td>
-                        <td>
-                            <span class="badge ${product.stock > 10 ? 'badge-success' : product.stock > 0 ? 'badge-warning' : 'badge-danger'}">
-                                ${product.stock || 0}
-                            </span>
-                        </td>
+                        <td>${stockDisplay}</td>
                         <td>${product.category || '-'}</td>
                         <td>
                             <button onclick="editProduct(${product.id})" class="btn btn-warning btn-sm" title="Editar producto">
                                 <i class="fas fa-edit"></i>
+                            </button>
+                            <button onclick="showStockModal(${product.id})" class="btn btn-success btn-sm" title="Gestionar stock por sucursal" style="margin-left: 5px;">
+                                <i class="fas fa-warehouse"></i>
                             </button>
                             <button onclick="deleteProduct(${product.id})" class="btn btn-danger btn-sm" title="Eliminar producto" style="margin-left: 5px;">
                                 <i class="fas fa-trash"></i>
