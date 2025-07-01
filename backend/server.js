@@ -277,11 +277,12 @@ app.use('*', (req, res) => {
 });
 
 // Iniciar servidor
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log('=================================');
   console.log('🚀 BACKEND SIMPLIFICADO INICIADO');
   console.log(`🌐 Puerto: ${PORT}`);
-  console.log(`📍 API: http://localhost:${PORT}/api`);
+  console.log(`📍 API Local: http://localhost:${PORT}/api`);
+  console.log(`📍 API Red: http://192.168.30.225:${PORT}/api`);
   console.log('🔐 Login: admin / admin123');
   console.log(`📦 Productos: ${products.length}`);
   console.log('=================================');
