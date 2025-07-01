@@ -1,4 +1,4 @@
-// server.js - Backend Híbrido: PostgreSQL con Fallback a Memoria
+// server.js - Backend Node.js con PostgreSQL
 const express = require('express');
 const cors = require('cors');
 const { Pool } = require('pg');
@@ -35,64 +35,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Datos de fallback en memoria
-
-let memoryProducts = [
-  {
-    id: 1,
-    name: 'Laptop Dell XPS 13',
-    description: 'Laptop ultrabook con procesador Intel Core i7',
-    price: 1299.99,
-    stock: 15,
-    category: 'Electrónica',
-    branch: 'Principal',
-    images: '[]',
-    created_at: new Date().toISOString()
-  },
-  {
-    id: 2,
-    name: 'iPhone 15 Pro',
-    description: 'Smartphone Apple con chip A17 Pro',
-    price: 999.99,
-    stock: 25,
-    category: 'Electrónica',
-    branch: 'Norte',
-    images: '[]',
-    created_at: new Date().toISOString()
-  },
-  {
-    id: 3,
-    name: 'Samsung Galaxy S24',
-    description: 'Smartphone Android con cámara de 200MP',
-    price: 899.99,
-    stock: 30,
-    category: 'Electrónica',
-    branch: 'Sur',
-    images: '[]',
-    created_at: new Date().toISOString()
-  }
-];
-
-let memoryOrders = [
-  {
-    id: 1001,
-    customer_name: 'Juan Pérez',
-    products: '[{"name": "Laptop Dell XPS 13", "quantity": 1, "price": 1299.99}]',
-    address: 'Calle Principal 123, Santo Domingo',
-    total: 1299.99,
-    status: 'pending',
-    created_at: new Date().toISOString()
-  },
-  {
-    id: 1002,
-    customer_name: 'María González',
-    products: '[{"name": "iPhone 15 Pro", "quantity": 2, "price": 999.99}]',
-    address: 'Av. Independencia 456, Santo Domingo Este',
-    total: 1999.98,
-    status: 'completed',
-    created_at: new Date().toISOString()
-  }
-];
 
 // Test de conexión a PostgreSQL
 async function testDatabaseConnection() {
@@ -103,17 +45,15 @@ async function testDatabaseConnection() {
     client.release();
     dbConnected = true;
     console.log('✅ PostgreSQL connected successfully:', result.rows[0].now);
-    return true;
   } catch (error) {
     dbConnected = false;
-    console.log('❌ PostgreSQL not available, using memory fallback:', error.message);
-    return false;
+    console.error('❌ PostgreSQL connection failed:', error.message);
+    throw error;
   }
 }
 
 // Inicializar base de datos PostgreSQL
 async function initDatabase() {
-  if (!dbConnected) return;
   
   try {
     console.log('🔄 Initializing PostgreSQL database...');
@@ -309,31 +249,6 @@ async function initDatabase() {
       console.log('✅ Admin user created in PostgreSQL');
     }
 
-    // Migrar datos de memoria a PostgreSQL si están vacías las tablas
-    const productsCount = await pool.query('SELECT COUNT(*) FROM productos');
-    if (parseInt(productsCount.rows[0].count) === 0) {
-      console.log('📦 Migrating memory data to PostgreSQL...');
-
-      for (const product of memoryProducts) {
-        await pool.query(
-          'INSERT INTO productos (id_articulo, numero_articulo, nombre, categoria, costo, descripcion) VALUES ($1, $2, $3, $4, $5, $6)',
-          [product.id, String(product.id), product.name, product.category, product.price, product.description]
-        );
-        await pool.query(
-          'INSERT INTO inventarios (id_articulo, sucursal_id, cantidad) VALUES ($1, 1, $2)',
-          [product.id, product.stock]
-        );
-      }
-      
-      for (const order of memoryOrders) {
-        await pool.query(
-          'INSERT INTO orders (customer_name, products, address, total, status) VALUES ($1, $2, $3, $4, $5)',
-          [order.customer_name, order.products, order.address, order.total, order.status]
-        );
-      }
-      
-      console.log('✅ Data migration completed');
-    }
 
     console.log('🎉 PostgreSQL database initialized successfully');
   } catch (error) {
@@ -344,8 +259,8 @@ async function initDatabase() {
 
 // Rutas de salud
 app.get('/api/health', async (req, res) => {
-  const dbStatus = dbConnected ? 'PostgreSQL Connected' : 'In-Memory Fallback';
-  
+  const dbStatus = dbConnected ? 'PostgreSQL Connected' : 'Not Connected';
+
   let dbTime = null;
   if (dbConnected) {
     try {
@@ -401,21 +316,6 @@ app.post('/api/auth/login', async (req, res) => {
           role: user.rows[0].role
         }
       });
-    } else {
-      // Fallback login (memoria)
-      if (username === 'admin' && password === 'admin123') {
-        console.log('✅ Memory fallback login successful');
-        res.json({
-          success: true,
-          user: {
-            id: 1,
-            username: 'admin',
-            role: 'admin'
-          }
-        });
-      } else {
-        res.status(401).json({ error: 'Credenciales incorrectas' });
-      }
     }
   } catch (error) {
     console.error('Login error:', error);
@@ -447,22 +347,12 @@ app.get('/api/products', async (req, res) => {
         );
         res.json(result.rows);
       }
-    } else {
-      let products = memoryProducts;
-      if (search) {
-        const term = search.toLowerCase();
-        products = products.filter(p =>
-          p.name.toLowerCase().includes(term) ||
-          (p.description && p.description.toLowerCase().includes(term))
-        );
       }
-      res.json(products);
+    } catch (error) {
+      console.error('Error getting products:', error);
+      res.status(500).json({ error: 'Error obteniendo productos' });
     }
-  } catch (error) {
-    console.error('Error getting products:', error);
-    res.json(memoryProducts); // Fallback
-  }
-});
+  });
 
 app.post('/api/products', async (req, res) => {
   try {
@@ -472,39 +362,25 @@ app.post('/api/products', async (req, res) => {
       return res.status(400).json({ error: 'Campos requeridos: name, price, stock, branch' });
     }
 
-      if (dbConnected) {
-        const numeroArticulo = Date.now().toString();
-        const idArticulo = Date.now();
-        await pool.query(
-          'INSERT INTO productos (id_articulo, numero_articulo, nombre, categoria, costo, descripcion) VALUES ($1, $2, $3, $4, $5, $6)',
-          [idArticulo, numeroArticulo, name, category, parseFloat(price), description]
-        );
-        await pool.query('SELECT actualizar_inventario($1, 1, $2)', [idArticulo, parseInt(stock)]);
-        const result = await pool.query(
-          `SELECT p.id_articulo AS id, p.nombre AS name, p.descripcion AS description, p.costo AS price,
-                  COALESCE(SUM(i.cantidad),0) AS stock, p.categoria AS category,
-                  p.created_at, p.updated_at
-           FROM productos p
-           LEFT JOIN inventarios i ON p.id_articulo = i.id_articulo
-           WHERE p.id_articulo = $1
-           GROUP BY p.id_articulo`,
-          [idArticulo]
-        );
-        res.json(result.rows[0]);
-    } else {
-      const newProduct = {
-        id: Date.now(),
-        name,
-        description,
-        price: parseFloat(price),
-        stock: parseInt(stock),
-        branch,
-        category,
-        images: JSON.stringify(images),
-        created_at: new Date().toISOString()
-      };
-      memoryProducts.push(newProduct);
-      res.json(newProduct);
+    if (dbConnected) {
+      const numeroArticulo = Date.now().toString();
+      const idArticulo = Date.now();
+      await pool.query(
+        'INSERT INTO productos (id_articulo, numero_articulo, nombre, categoria, costo, descripcion) VALUES ($1, $2, $3, $4, $5, $6)',
+        [idArticulo, numeroArticulo, name, category, parseFloat(price), description]
+      );
+      await pool.query('SELECT actualizar_inventario($1, 1, $2)', [idArticulo, parseInt(stock)]);
+      const result = await pool.query(
+        `SELECT p.id_articulo AS id, p.nombre AS name, p.descripcion AS description, p.costo AS price,
+                COALESCE(SUM(i.cantidad),0) AS stock, p.categoria AS category,
+                p.created_at, p.updated_at
+         FROM productos p
+         LEFT JOIN inventarios i ON p.id_articulo = i.id_articulo
+         WHERE p.id_articulo = $1
+         GROUP BY p.id_articulo`,
+        [idArticulo]
+      );
+      res.json(result.rows[0]);
     }
   } catch (error) {
     console.error('Error creating product:', error);
@@ -538,23 +414,6 @@ app.put('/api/products/:id', async (req, res) => {
           [id]
         );
       res.json(updated.rows[0]);
-    } else {
-      const productIndex = memoryProducts.findIndex(p => p.id == id);
-      if (productIndex === -1) {
-        return res.status(404).json({ error: 'Producto no encontrado' });
-      }
-      
-      memoryProducts[productIndex] = {
-        ...memoryProducts[productIndex],
-        name,
-        description,
-        price: parseFloat(price),
-        stock: parseInt(stock),
-        branch,
-        category,
-        images: JSON.stringify(images)
-      };
-      res.json(memoryProducts[productIndex]);
     }
   } catch (error) {
     console.error('Error updating product:', error);
@@ -571,14 +430,8 @@ app.delete('/api/products/:id', async (req, res) => {
       if (result.rows.length === 0) {
         return res.status(404).json({ error: 'Producto no encontrado' });
       }
-    } else {
-      const productIndex = memoryProducts.findIndex(p => p.id == id);
-      if (productIndex === -1) {
-        return res.status(404).json({ error: 'Producto no encontrado' });
-      }
-      memoryProducts.splice(productIndex, 1);
     }
-    
+
     res.json({ success: true, message: 'Producto eliminado correctamente' });
   } catch (error) {
     console.error('Error deleting product:', error);
@@ -592,12 +445,10 @@ app.get('/api/orders', async (req, res) => {
     if (dbConnected) {
       const result = await pool.query('SELECT * FROM orders ORDER BY created_at DESC');
       res.json(result.rows);
-    } else {
-      res.json(memoryOrders);
     }
   } catch (error) {
     console.error('Error getting orders:', error);
-    res.json(memoryOrders);
+    res.status(500).json({ error: 'Error obteniendo pedidos' });
   }
 });
 
@@ -611,18 +462,6 @@ app.post('/api/orders', async (req, res) => {
         [customer_name, JSON.stringify(products), address, parseFloat(total), status]
       );
       res.json(result.rows[0]);
-    } else {
-      const newOrder = {
-        id: Date.now(),
-        customer_name,
-        products: JSON.stringify(products),
-        address,
-        total: parseFloat(total),
-        status,
-        created_at: new Date().toISOString()
-      };
-      memoryOrders.push(newOrder);
-      res.json(newOrder);
     }
   } catch (error) {
     console.error('Error creating order:', error);
@@ -647,18 +486,6 @@ app.get('/api/stats', async (req, res) => {
         totalOrders: parseInt(ordersCount.rows[0].count),
         totalSales: parseFloat(salesTotal.rows[0].total_sales || 0)
       });
-    } else {
-      const totalProducts = memoryProducts.length;
-      const totalValue = memoryProducts.reduce((sum, product) => sum + (product.price * product.stock), 0);
-      const totalOrders = memoryOrders.length;
-      const totalSales = memoryOrders.reduce((sum, order) => sum + order.total, 0);
-      
-      res.json({
-        totalProducts,
-        totalValue,
-        totalOrders,
-        totalSales
-      });
     }
   } catch (error) {
     console.error('Error getting stats:', error);
@@ -668,9 +495,9 @@ app.get('/api/stats', async (req, res) => {
 
 // Ruta raíz
 app.get('/', (req, res) => {
-  res.json({ 
+  res.json({
     message: 'API del Sistema de Gestión de Productos',
-    database: dbConnected ? 'PostgreSQL' : 'In-Memory',
+    database: 'PostgreSQL',
     endpoints: [
       'GET /api/health',
       'POST /api/auth/login',
@@ -702,17 +529,15 @@ async function startServer() {
     // Test de conexión a PostgreSQL
     await testDatabaseConnection();
     
-    if (dbConnected) {
-      await initDatabase();
-    }
+    await initDatabase();
     
     app.listen(PORT, '0.0.0.0', () => {
       console.log('=================================');
-      console.log('🚀 BACKEND HÍBRIDO INICIADO');
+      console.log('🚀 BACKEND INICIADO');
       console.log(`🌐 Puerto: ${PORT}`);
       console.log(`📍 API: http://localhost:${PORT}/api`);
-      console.log(`🗄️ Base de datos: ${dbConnected ? 'PostgreSQL' : 'In-Memory'}`);
-      console.log(`🔐 Login: admin / admin123`);
+      console.log('🗄️ Base de datos: PostgreSQL');
+      console.log('🔐 Login: admin / admin123');
       console.log('=================================');
     });
   } catch (error) {
