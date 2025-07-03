@@ -451,69 +451,312 @@ async function getProductsWithPagination(search, status, category, page, limit, 
   }
 }
 
-app.post('/api/products', async (req, res) => {
-  console.log('📝 Creating product:', req.body);
+// Fix para el endpoint de productos - Agregar/reemplazar en server.js
+
+// ==================== PRODUCTOS CON PAGINACIÓN (VERSIÓN CORREGIDA) ====================
+app.get('/api/products', async (req, res) => {
+  console.log('📦 Getting products with pagination...');
+  console.log('📋 Query params:', req.query);
   
   try {
     const { 
-      name, 
-      description = '', 
-      price, 
-      stock = 0, 
+      search = '', 
+      status = '', 
       category = '',
-      branch = 'PRINCIPAL'
-    } = req.body;
+      page = 1,
+      limit = 10,
+      sort_by = 'nombre',
+      sort_order = 'ASC'
+    } = req.query;
     
-    // Validaciones básicas
-    if (!name || !price) {
-      return res.status(400).json({ error: 'Nombre y precio son requeridos' });
+    // Validar parámetros
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
+    const offset = (pageNum - 1) * limitNum;
+    
+    console.log(`📄 Página: ${pageNum}, Límite: ${limitNum}, Offset: ${offset}`);
+    
+    // Validar campos de ordenamiento
+    const validSortFields = ['nombre', 'precio', 'categoria', 'created_at', 'id_articulo'];
+    const sortField = validSortFields.includes(sort_by) ? sort_by : 'nombre';
+    const sortDirection = sort_order.toUpperCase() === 'DESC' ? 'DESC' : 'ASC';
+    
+    console.log(`🔄 Ordenamiento: ${sortField} ${sortDirection}`);
+    
+    // Primero, intentar una consulta simple para verificar que los productos existen
+    console.log('🔍 Verificando productos en la base de datos...');
+    const testQuery = await executeQuery('SELECT COUNT(*) as total FROM productos');
+    console.log(`📊 Total de productos en BD: ${testQuery.rows[0].total}`);
+    
+    if (parseInt(testQuery.rows[0].total) === 0) {
+      console.log('⚠️ No hay productos en la base de datos, creando datos de ejemplo...');
+      await createSampleData();
     }
     
-    // Insertar producto
-    const productResult = await executeQuery(
-      `INSERT INTO productos (nombre, descripcion, precio, categoria, activo) 
-       VALUES ($1, $2, $3, $4, true) 
-       RETURNING id_articulo, nombre, descripcion, precio, categoria, activo, created_at`,
-      [name, description, parseFloat(price), category]
-    );
+    // Consulta simplificada sin JOINs complejos
+    let baseQuery = `
+      SELECT 
+        p.id_articulo,
+        p.numero_articulo,
+        p.nombre,
+        p.categoria,
+        p.precio,
+        p.descripcion,
+        p.activo,
+        p.created_at,
+        p.updated_at,
+        COALESCE(stock_calc.stock_total, 0) as stock_total,
+        COALESCE(stock_calc.stock_detail, 'Sin stock') as stock_por_sucursal
+      FROM productos p
+      LEFT JOIN (
+        SELECT 
+          i.id_articulo,
+          SUM(i.cantidad) as stock_total,
+          STRING_AGG(s.nombre || ': ' || i.cantidad, ', ' ORDER BY s.nombre) as stock_detail
+        FROM inventarios i
+        JOIN sucursales s ON i.sucursal_id = s.id AND s.activa = TRUE
+        GROUP BY i.id_articulo
+      ) stock_calc ON p.id_articulo = stock_calc.id_articulo
+      WHERE 1=1
+    `;
     
-    const newProduct = productResult.rows[0];
+    const params = [];
+    let paramIndex = 1;
     
-    // Si se especifica stock, agregarlo a la sucursal
-    if (stock > 0) {
-      try {
-        const sucursalResult = await executeQuery(
-          'SELECT id FROM sucursales WHERE nombre = $1',
-          [branch]
+    // Aplicar filtros
+    if (search) {
+      baseQuery += ` AND (
+        LOWER(p.nombre) LIKE LOWER($${paramIndex}) OR
+        LOWER(COALESCE(p.descripcion, '')) LIKE LOWER($${paramIndex}) OR
+        LOWER(COALESCE(p.categoria, '')) LIKE LOWER($${paramIndex})
+      )`;
+      params.push(`%${search}%`);
+      paramIndex++;
+    }
+    
+    if (category) {
+      baseQuery += ` AND p.categoria = $${paramIndex}`;
+      params.push(category);
+      paramIndex++;
+    }
+    
+    if (status === 'active') {
+      baseQuery += ` AND p.activo = true`;
+    } else if (status === 'inactive') {
+      baseQuery += ` AND p.activo = false`;
+    }
+    
+    // Count query
+    const countQuery = `SELECT COUNT(*) as total FROM (${baseQuery}) as counted`;
+    console.log('📊 Ejecutando count query...');
+    const countResult = await executeQuery(countQuery, params);
+    const totalCount = parseInt(countResult.rows[0].total);
+    console.log(`📊 Total encontrado: ${totalCount}`);
+    
+    // Data query con ordenamiento y paginación
+    const dataQuery = `${baseQuery} ORDER BY p.${sortField} ${sortDirection} LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+    params.push(limitNum, offset);
+    
+    console.log('📄 Ejecutando data query...');
+    console.log('🔍 Query:', dataQuery);
+    console.log('📋 Params:', params);
+    
+    const dataResult = await executeQuery(dataQuery, params);
+    console.log(`✅ Productos obtenidos: ${dataResult.rows.length}`);
+    
+    // Formatear datos para el frontend
+    const formattedProducts = dataResult.rows.map(row => ({
+      id: row.id_articulo,
+      name: row.nombre || 'Sin nombre',
+      description: row.descripcion || '',
+      price: parseFloat(row.precio) || 0,
+      stock: parseInt(row.stock_total) || 0,
+      stock_detail: row.stock_por_sucursal || 'Sin stock',
+      category: row.categoria || 'Sin categoría',
+      active: row.activo !== false, // Default true si es null
+      created_at: row.created_at
+    }));
+    
+    // Calcular información de paginación
+    const totalPages = Math.ceil(totalCount / limitNum);
+    const hasNextPage = pageNum < totalPages;
+    const hasPrevPage = pageNum > 1;
+    
+    console.log(`✅ Returning ${formattedProducts.length} of ${totalCount} products (page ${pageNum}/${totalPages})`);
+    
+    const response = {
+      products: formattedProducts,
+      pagination: {
+        current_page: pageNum,
+        total_pages: totalPages,
+        per_page: limitNum,
+        total_items: totalCount,
+        has_next_page: hasNextPage,
+        has_prev_page: hasPrevPage,
+        next_page: hasNextPage ? pageNum + 1 : null,
+        prev_page: hasPrevPage ? pageNum - 1 : null
+      },
+      filters: {
+        search,
+        status,
+        category,
+        sort_by: sortField,
+        sort_order: sortDirection
+      }
+    };
+    
+    console.log('📤 Enviando respuesta:', {
+      productos_count: response.products.length,
+      pagination: response.pagination
+    });
+    
+    res.json(response);
+    
+  } catch (error) {
+    console.error('❌ Error detallado en /api/products:', error);
+    console.error('❌ Stack trace:', error.stack);
+    
+    // Respuesta de error detallada para debugging
+    res.status(500).json({ 
+      error: 'Error obteniendo productos',
+      details: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
+
+// Función para crear datos de ejemplo si no existen
+async function createSampleData() {
+  try {
+    console.log('🔧 Creando datos de ejemplo...');
+    
+    // Insertar productos de ejemplo
+    const sampleProducts = [
+      {
+        nombre: 'Laptop Dell Inspiron',
+        descripcion: 'Laptop potente para trabajo y estudio',
+        precio: 45000,
+        categoria: 'Electrónicos'
+      },
+      {
+        nombre: 'Mouse Inalámbrico',
+        descripcion: 'Mouse ergonómico con conectividad Bluetooth',
+        precio: 1500,
+        categoria: 'Electrónicos'
+      },
+      {
+        nombre: 'Teclado Mecánico',
+        descripcion: 'Teclado RGB para gaming',
+        precio: 3500,
+        categoria: 'Electrónicos'
+      },
+      {
+        nombre: 'Monitor 24 pulgadas',
+        descripcion: 'Monitor Full HD para oficina',
+        precio: 12000,
+        categoria: 'Electrónicos'
+      },
+      {
+        nombre: 'Cable USB-C',
+        descripcion: 'Cable USB-C de alta velocidad',
+        precio: 500,
+        categoria: 'Accesorios'
+      }
+    ];
+    
+    for (const product of sampleProducts) {
+      // Verificar si el producto ya existe
+      const exists = await executeQuery(
+        'SELECT id_articulo FROM productos WHERE nombre = $1',
+        [product.nombre]
+      );
+      
+      if (exists.rows.length === 0) {
+        console.log(`➕ Creando producto: ${product.nombre}`);
+        
+        const result = await executeQuery(
+          `INSERT INTO productos (nombre, descripcion, precio, categoria, activo) 
+           VALUES ($1, $2, $3, $4, true) 
+           RETURNING id_articulo`,
+          [product.nombre, product.descripcion, product.precio, product.categoria]
         );
         
-        if (sucursalResult.rows.length > 0) {
-          const sucursalId = sucursalResult.rows[0].id;
-          await updateInventoryWithFallback(newProduct.id_articulo, sucursalId, parseInt(stock));
-        }
-      } catch (error) {
-        console.warn('⚠️ Error agregando inventario inicial:', error);
+        const productId = result.rows[0].id_articulo;
+        
+        // Agregar inventario en ambas sucursales
+        const stockPrincipal = Math.floor(Math.random() * 20) + 5;
+        const stockHiguey = Math.floor(Math.random() * 15) + 3;
+        
+        await executeQuery(
+          `INSERT INTO inventarios (id_articulo, sucursal_id, cantidad) 
+           VALUES ($1, 1, $2) ON CONFLICT (id_articulo, sucursal_id) DO NOTHING`,
+          [productId, stockPrincipal]
+        );
+        
+        await executeQuery(
+          `INSERT INTO inventarios (id_articulo, sucursal_id, cantidad) 
+           VALUES ($1, 2, $2) ON CONFLICT (id_articulo, sucursal_id) DO NOTHING`,
+          [productId, stockHiguey]
+        );
+        
+        console.log(`✅ Producto creado: ${product.nombre} (Stock: Principal=${stockPrincipal}, Higüey=${stockHiguey})`);
       }
     }
     
-    // Retornar producto formateado
-    const formattedProduct = {
-      id: newProduct.id_articulo,
-      name: newProduct.nombre,
-      description: newProduct.descripcion,
-      price: parseFloat(newProduct.precio),
-      stock: parseInt(stock),
-      stock_detail: `${branch}: ${stock}`,
-      category: newProduct.categoria,
-      active: newProduct.activo,
-      created_at: newProduct.created_at
-    };
+    console.log('✅ Datos de ejemplo creados exitosamente');
     
-    console.log('✅ Product created');
-    res.json(formattedProduct);
   } catch (error) {
-    console.error('❌ Error creating product:', error);
-    res.status(500).json({ error: 'Error creando producto' });
+    console.error('❌ Error creando datos de ejemplo:', error);
+  }
+}
+
+// Endpoint de debugging para verificar estado de la BD
+app.get('/api/debug/database', async (req, res) => {
+  try {
+    console.log('🔍 Ejecutando debug de base de datos...');
+    
+    const tables = await executeQuery(`
+      SELECT table_name 
+      FROM information_schema.tables 
+      WHERE table_schema = 'public'
+      ORDER BY table_name
+    `);
+    
+    const productCount = await executeQuery('SELECT COUNT(*) as count FROM productos');
+    const inventoryCount = await executeQuery('SELECT COUNT(*) as count FROM inventarios');
+    const branchCount = await executeQuery('SELECT COUNT(*) as count FROM sucursales');
+    
+    const sampleProducts = await executeQuery(`
+      SELECT p.*, 
+             STRING_AGG(s.nombre || ':' || COALESCE(i.cantidad, 0), ', ') as inventory
+      FROM productos p
+      LEFT JOIN inventarios i ON p.id_articulo = i.id_articulo
+      LEFT JOIN sucursales s ON i.sucursal_id = s.id
+      GROUP BY p.id_articulo, p.nombre, p.precio, p.categoria, p.activo, p.created_at
+      LIMIT 5
+    `);
+    
+    res.json({
+      status: 'OK',
+      timestamp: new Date().toISOString(),
+      database_info: {
+        tables: tables.rows.map(r => r.table_name),
+        counts: {
+          productos: parseInt(productCount.rows[0].count),
+          inventarios: parseInt(inventoryCount.rows[0].count),
+          sucursales: parseInt(branchCount.rows[0].count)
+        },
+        sample_products: sampleProducts.rows,
+        functions_available: functionsAvailable
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error en debug:', error);
+    res.status(500).json({
+      error: 'Error en debug de base de datos',
+      details: error.message
+    });
   }
 });
 
