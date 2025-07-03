@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema de Gestión - Productos y Pedidos</title>
+    <title>Sistema de Gestión - PostgreSQL</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/js/all.min.js"></script>
     <style>
         * {
@@ -162,6 +162,11 @@
             left: 100%;
         }
 
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
         .btn-primary {
             background: var(--gradient);
             color: white;
@@ -170,7 +175,7 @@
             box-shadow: 0 10px 25px -5px rgba(14, 165, 233, 0.4);
         }
 
-        .btn-primary:hover {
+        .btn-primary:hover:not(:disabled) {
             transform: translateY(-2px);
             box-shadow: 0 15px 35px -5px rgba(14, 165, 233, 0.5);
         }
@@ -459,6 +464,7 @@
             border-radius: 8px;
             margin-bottom: 20px;
             border-left: 4px solid;
+            animation: slideIn 0.3s ease;
         }
 
         .alert-success {
@@ -473,8 +479,14 @@
             color: #991b1b;
         }
 
+        .alert-info {
+            background: #f0f9ff;
+            border-color: var(--primary);
+            color: #1e40af;
+        }
+
         .hidden {
-            display: none;
+            display: none !important;
         }
 
         .badge {
@@ -613,36 +625,48 @@
             font-weight: 500;
         }
 
-        .status-toggle {
-            position: relative;
-            width: 48px;
-            height: 24px;
-            background: var(--danger);
-            border-radius: 12px;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-right: 8px;
-        }
-
-        .status-toggle.active {
-            background: var(--success);
-        }
-
-        .status-toggle::after {
-            content: '';
-            position: absolute;
-            top: 2px;
-            left: 2px;
+        .loading {
+            display: inline-block;
             width: 20px;
             height: 20px;
-            background: white;
+            border: 3px solid rgba(255, 255, 255, 0.3);
             border-radius: 50%;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
         }
 
-        .status-toggle.active::after {
-            transform: translateX(24px);
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes slideIn {
+            from { transform: translateX(100%); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+
+        /* Connection Status */
+        .connection-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            z-index: 1000;
+            transition: all 0.3s ease;
+        }
+
+        .connection-status.connected {
+            background: #f0fdf4;
+            border: 1px solid #059669;
+            color: #166534;
+        }
+
+        .connection-status.disconnected {
+            background: #fef2f2;
+            border: 1px solid #ef4444;
+            color: #991b1b;
         }
 
         /* Responsive */
@@ -681,12 +705,17 @@
     </style>
 </head>
 <body>
+    <!-- Connection Status -->
+    <div id="connectionStatus" class="connection-status hidden">
+        <i class="fas fa-wifi"></i> Verificando conexión...
+    </div>
+
     <!-- Login Screen -->
     <div id="loginScreen" class="login-container">
         <div class="login-card">
             <div class="login-header">
                 <h1><i class="fas fa-store"></i> Sistema de Gestión</h1>
-                <p>Ingresa tus credenciales para continuar</p>
+                <p>PostgreSQL · Versión 3.0</p>
             </div>
             <form id="loginForm">
                 <div class="form-group">
@@ -697,12 +726,15 @@
                     <label for="password">Contraseña</label>
                     <input type="password" id="password" class="form-control" value="admin123" required>
                 </div>
-                <button type="submit" class="btn btn-primary">
+                <button type="submit" class="btn btn-primary" id="loginButton">
                     <i class="fas fa-sign-in-alt"></i> Iniciar Sesión
                 </button>
             </form>
             <div id="loginError" class="alert alert-danger hidden">
-                Credenciales incorrectas
+                Error de conexión con el servidor
+            </div>
+            <div id="loginInfo" class="alert alert-info hidden">
+                Conectando con el servidor...
             </div>
         </div>
     </div>
@@ -711,10 +743,13 @@
     <div id="mainApp" class="container hidden">
         <div class="app-container">
             <div class="header">
-                <h1><i class="fas fa-store"></i> Sistema de Gestión</h1>
-                <button onclick="logout()" class="btn" style="background: rgba(255, 255, 255, 0.2); color: white; border: 1px solid rgba(255, 255, 255, 0.3); backdrop-filter: blur(10px);">
-                    <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
-                </button>
+                <h1><i class="fas fa-store"></i> Sistema de Gestión PostgreSQL</h1>
+                <div style="display: flex; align-items: center; gap: 16px;">
+                    <span id="currentUser" style="color: rgba(255,255,255,0.8); font-size: 14px;"></span>
+                    <button onclick="logout()" class="btn" style="background: rgba(255, 255, 255, 0.2); color: white; border: 1px solid rgba(255, 255, 255, 0.3); backdrop-filter: blur(10px);">
+                        <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
+                    </button>
+                </div>
             </div>
 
             <div class="nav-tabs">
@@ -723,6 +758,9 @@
                 </button>
                 <button class="nav-tab" onclick="showTab('orders')">
                     <i class="fas fa-shopping-cart"></i> Pedidos
+                </button>
+                <button class="nav-tab" onclick="showTab('reports')">
+                    <i class="fas fa-chart-bar"></i> Reportes
                 </button>
             </div>
 
@@ -741,6 +779,15 @@
                         </div>
                         <div class="stat-card">
                             <div class="stat-icon">
+                                <i class="fas fa-toggle-on"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="activeProducts">0</h3>
+                                <p>Productos Activos</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">
                                 <i class="fas fa-dollar-sign"></i>
                             </div>
                             <div class="stat-content">
@@ -750,11 +797,11 @@
                         </div>
                         <div class="stat-card">
                             <div class="stat-icon">
-                                <i class="fas fa-toggle-on"></i>
+                                <i class="fas fa-warehouse"></i>
                             </div>
                             <div class="stat-content">
-                                <h3 id="activeProducts">0</h3>
-                                <p>Productos Activos</p>
+                                <h3 id="totalStock">0</h3>
+                                <p>Stock Total</p>
                             </div>
                         </div>
                     </div>
@@ -792,7 +839,12 @@
                                         </tr>
                                     </thead>
                                     <tbody id="productsTable">
-                                        <!-- Products will be loaded here -->
+                                        <tr>
+                                            <td colspan="7" style="text-align: center; padding: 40px;">
+                                                <div class="loading"></div>
+                                                <p style="margin-top: 10px;">Cargando productos...</p>
+                                            </td>
+                                        </tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -821,6 +873,24 @@
                                 <p>Ventas Totales</p>
                             </div>
                         </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="completedOrders">0</h3>
+                                <p>Pedidos Completados</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-clock"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="pendingOrders">0</h3>
+                                <p>Pedidos Pendientes</p>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="card">
@@ -828,7 +898,126 @@
                             <h3>Pedidos Recientes</h3>
                         </div>
                         <div class="card-body">
-                            <p>No hay pedidos registrados</p>
+                            <div class="table-container">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>ID</th>
+                                            <th>Cliente</th>
+                                            <th>Total</th>
+                                            <th>Estado</th>
+                                            <th>Fecha</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="ordersTable">
+                                        <tr>
+                                            <td colspan="5" style="text-align: center; padding: 40px;">
+                                                <div class="loading"></div>
+                                                <p style="margin-top: 10px;">Cargando pedidos...</p>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Reports Tab -->
+                <div id="reports" class="tab-pane">
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-exclamation-triangle"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="lowStockCount">0</h3>
+                                <p>Productos Bajo Stock</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-building"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="branchesCount">2</h3>
+                                <p>Sucursales Activas</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-tags"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="categoriesCount">0</h3>
+                                <p>Categorías</p>
+                            </div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-database"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3>PostgreSQL</h3>
+                                <p>Base de Datos</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Productos con Bajo Stock</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-container">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Producto</th>
+                                            <th>Sucursal</th>
+                                            <th>Stock Actual</th>
+                                            <th>Estado</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="lowStockTable">
+                                        <tr>
+                                            <td colspan="4" style="text-align: center; padding: 40px;">
+                                                <div class="loading"></div>
+                                                <p style="margin-top: 10px;">Cargando reporte...</p>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3>Valor del Inventario por Producto</h3>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-container">
+                                <table class="table">
+                                    <thead>
+                                        <tr>
+                                            <th>Producto</th>
+                                            <th>Categoría</th>
+                                            <th>Precio Unitario</th>
+                                            <th>Stock Total</th>
+                                            <th>Valor Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="inventoryValueTable">
+                                        <tr>
+                                            <td colspan="5" style="text-align: center; padding: 40px;">
+                                                <div class="loading"></div>
+                                                <p style="margin-top: 10px;">Cargando valor del inventario...</p>
+                                            </td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -837,7 +1026,7 @@
     </div>
 
     <script>
-        // Configuración de la API
+        // Configuración de la API - ACTUALIZADA PARA POSTGRESQL
         const API_BASE_URL = `http://${window.location.hostname}:3053/api`;
         
         // Global variables
@@ -845,38 +1034,67 @@
         let filteredProducts = [];
         let orders = [];
         let currentUser = null;
+        let connectionRetries = 0;
+        const MAX_RETRIES = 3;
 
-        console.log('🚀 Sistema iniciado');
+        console.log('🚀 Sistema PostgreSQL iniciado');
         console.log('🌐 API URL:', API_BASE_URL);
 
         // Initialize app
         document.addEventListener('DOMContentLoaded', function() {
-            testAPIConnection();
+            console.log('📱 DOM cargado, iniciando aplicación...');
+            checkAPIConnection();
             
+            // Verificar sesión guardada
             const savedUser = localStorage.getItem('currentUser');
             if (savedUser) {
                 try {
                     currentUser = JSON.parse(savedUser);
+                    console.log('👤 Usuario guardado encontrado:', currentUser.username);
                     showMainApp();
                 } catch (e) {
-                    console.warn('Error al cargar sesión:', e);
+                    console.warn('⚠️ Error al cargar sesión guardada:', e);
                     localStorage.removeItem('currentUser');
+                    showLoginScreen();
                 }
+            } else {
+                showLoginScreen();
             }
         });
 
-        // API Helper Functions
+        // Connection Status Management
+        function updateConnectionStatus(connected, message = '') {
+            const statusElement = document.getElementById('connectionStatus');
+            statusElement.classList.remove('hidden', 'connected', 'disconnected');
+            
+            if (connected) {
+                statusElement.classList.add('connected');
+                statusElement.innerHTML = '<i class="fas fa-check-circle"></i> Conectado al servidor';
+                setTimeout(() => statusElement.classList.add('hidden'), 3000);
+            } else {
+                statusElement.classList.add('disconnected');
+                statusElement.innerHTML = `<i class="fas fa-exclamation-triangle"></i> ${message || 'Sin conexión al servidor'}`;
+            }
+        }
+
+        // API Helper Functions - MEJORADO PARA POSTGRESQL
         async function apiCall(endpoint, options = {}) {
             try {
                 console.log(`🔄 API Call: ${endpoint}`);
                 
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 segundos timeout
+
                 const response = await fetch(`${API_BASE_URL}${endpoint}`, {
                     headers: {
                         'Content-Type': 'application/json',
                         ...options.headers
                     },
+                    signal: controller.signal,
                     ...options
                 });
+
+                clearTimeout(timeoutId);
 
                 console.log(`📡 Response status: ${response.status}`);
 
@@ -888,30 +1106,56 @@
 
                 const data = await response.json();
                 console.log(`✅ API Response:`, data);
+                
+                // Reset retry counter on successful call
+                connectionRetries = 0;
+                updateConnectionStatus(true);
+                
                 return data;
             } catch (error) {
                 console.error('❌ API Error:', error);
+                
+                if (error.name === 'AbortError') {
+                    updateConnectionStatus(false, 'Timeout de conexión');
+                } else {
+                    updateConnectionStatus(false, 'Error de servidor');
+                }
+                
                 throw error;
             }
         }
 
-        // Test API connection
-        async function testAPIConnection() {
+        // Check API connection
+        async function checkAPIConnection() {
             try {
-                console.log('🔍 Probando conexión...');
+                console.log('🔍 Verificando conexión al servidor PostgreSQL...');
+                showInfo('Verificando conexión al servidor...');
+                
                 const health = await apiCall('/health');
-                console.log('✅ API conectada:', health);
+                console.log('✅ Servidor PostgreSQL conectado:', health);
+                
+                updateConnectionStatus(true);
+                hideInfo();
                 return true;
             } catch (error) {
-                console.error('❌ API no disponible:', error);
+                console.error('❌ Servidor no disponible:', error);
+                connectionRetries++;
+                
+                if (connectionRetries < MAX_RETRIES) {
+                    showInfo(`Reintentando conexión... (${connectionRetries}/${MAX_RETRIES})`);
+                    setTimeout(checkAPIConnection, 2000);
+                } else {
+                    showError('No se puede conectar al servidor PostgreSQL');
+                    updateConnectionStatus(false, 'Servidor no disponible');
+                }
                 return false;
             }
         }
 
-        // Authentication
+        // Authentication - ACTUALIZADO
         document.getElementById('loginForm').addEventListener('submit', async function(e) {
             e.preventDefault();
-            console.log('🔐 Intento de login...');
+            console.log('🔐 Intento de login con PostgreSQL...');
             
             const username = document.getElementById('username').value.trim();
             const password = document.getElementById('password').value.trim();
@@ -921,12 +1165,18 @@
                 return;
             }
 
-            const submitButton = e.target.querySelector('button[type="submit"]');
+            const submitButton = document.getElementById('loginButton');
             const originalText = submitButton.innerHTML;
-            submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Conectando...';
+            submitButton.innerHTML = '<div class="loading"></div> Conectando...';
             submitButton.disabled = true;
 
             try {
+                // Verificar conexión primero
+                const connected = await checkAPIConnection();
+                if (!connected) {
+                    throw new Error('No hay conexión al servidor');
+                }
+
                 const data = await apiCall('/auth/login', {
                     method: 'POST',
                     body: JSON.stringify({ username, password })
@@ -935,7 +1185,7 @@
                 console.log('📋 Login response:', data);
 
                 if (data && data.success === true && data.user) {
-                    console.log('✅ Login exitoso!');
+                    console.log('✅ Login exitoso con PostgreSQL!');
                     currentUser = data.user;
                     localStorage.setItem('currentUser', JSON.stringify(currentUser));
                     showMainApp();
@@ -945,66 +1195,107 @@
                 }
             } catch (error) {
                 console.error('❌ Error en login:', error);
-                showError('Error de conexión con el servidor');
+                if (error.message.includes('No hay conexión')) {
+                    showError('No se puede conectar al servidor PostgreSQL');
+                } else {
+                    showError('Error de conexión. Verifica que el servidor esté ejecutándose.');
+                }
             } finally {
                 submitButton.innerHTML = originalText;
                 submitButton.disabled = false;
             }
         });
 
+        function showLoginScreen() {
+            document.getElementById('loginScreen').classList.remove('hidden');
+            document.getElementById('mainApp').classList.add('hidden');
+        }
+
         function showMainApp() {
-            console.log('🎯 Mostrando aplicación principal');
+            console.log('🎯 Mostrando aplicación principal PostgreSQL');
             document.getElementById('loginScreen').classList.add('hidden');
             document.getElementById('mainApp').classList.remove('hidden');
+            
+            // Mostrar usuario actual
+            if (currentUser) {
+                document.getElementById('currentUser').textContent = `Bienvenido, ${currentUser.username}`;
+            }
+            
             loadData();
         }
 
         function logout() {
+            console.log('👋 Cerrando sesión...');
             localStorage.removeItem('currentUser');
             currentUser = null;
-            document.getElementById('loginScreen').classList.remove('hidden');
-            document.getElementById('mainApp').classList.add('hidden');
+            showLoginScreen();
+            
+            // Reset form
             document.getElementById('username').value = 'admin';
             document.getElementById('password').value = 'admin123';
+            hideError();
+            hideInfo();
         }
 
         function showError(message) {
             const errorElement = document.getElementById('loginError');
             errorElement.textContent = message;
             errorElement.classList.remove('hidden');
+            hideInfo();
+            
             setTimeout(() => {
                 errorElement.classList.add('hidden');
             }, 5000);
         }
 
-        // Data Loading Functions
+        function showInfo(message) {
+            const infoElement = document.getElementById('loginInfo');
+            infoElement.textContent = message;
+            infoElement.classList.remove('hidden');
+            hideError();
+        }
+
+        function hideError() {
+            document.getElementById('loginError').classList.add('hidden');
+        }
+
+        function hideInfo() {
+            document.getElementById('loginInfo').classList.add('hidden');
+        }
+
+        // Data Loading Functions - ACTUALIZADO PARA POSTGRESQL
         async function loadData() {
-            console.log('📥 Cargando datos...');
+            console.log('📥 Cargando datos desde PostgreSQL...');
             try {
                 await Promise.all([
                     loadProducts(),
-                    loadStats()
+                    loadOrders(),
+                    loadStats(),
+                    loadReports()
                 ]);
-                console.log('✅ Datos cargados');
+                console.log('✅ Todos los datos cargados desde PostgreSQL');
             } catch (error) {
                 console.error('❌ Error cargando datos:', error);
+                showNotification('Error cargando datos del servidor', 'danger');
             }
         }
 
         async function loadProducts() {
             try {
-                console.log('📦 Cargando productos...');
+                console.log('📦 Cargando productos desde PostgreSQL...');
                 const data = await apiCall('/products');
                 products = data || [];
                 
-                // Agregar estado activo por defecto si no existe
+                // Validar estructura de datos
                 products = products.map(product => ({
                     ...product,
-                    active: product.active !== undefined ? product.active : true
+                    active: product.active !== undefined ? product.active : true,
+                    stock: product.stock || 0,
+                    price: product.price || 0
                 }));
                 
                 filteredProducts = [...products];
-                console.log(`✅ ${products.length} productos cargados`);
+                console.log(`✅ ${products.length} productos cargados desde PostgreSQL`);
                 populateCategoryFilter();
                 renderProducts();
             } catch (error) {
@@ -1013,9 +1304,22 @@
             }
         }
 
+        async function loadOrders() {
+            try {
+                console.log('🛒 Cargando pedidos desde PostgreSQL...');
+                const data = await apiCall('/orders');
+                orders = data || [];
+                console.log(`✅ ${orders.length} pedidos cargados`);
+                renderOrders();
+            } catch (error) {
+                console.error('❌ Error cargando pedidos:', error);
+                renderOrdersError();
+            }
+        }
+
         async function loadStats() {
             try {
-                console.log('📊 Cargando estadísticas...');
+                console.log('📊 Cargando estadísticas desde PostgreSQL...');
                 const stats = await apiCall('/stats');
                 updateStatsDisplay(stats);
             } catch (error) {
@@ -1023,7 +1327,40 @@
             }
         }
 
-        // Product Management Functions
+        async function loadReports() {
+            try {
+                console.log('📋 Cargando reportes desde PostgreSQL...');
+                await Promise.all([
+                    loadLowStockReport(),
+                    loadInventoryValueReport()
+                ]);
+            } catch (error) {
+                console.error('❌ Error cargando reportes:', error);
+            }
+        }
+
+        async function loadLowStockReport() {
+            try {
+                const data = await apiCall('/reports/low-stock');
+                renderLowStockReport(data);
+                
+                // Actualizar contador en estadísticas
+                document.getElementById('lowStockCount').textContent = data.length;
+            } catch (error) {
+                console.error('❌ Error cargando reporte de bajo stock:', error);
+            }
+        }
+
+        async function loadInventoryValueReport() {
+            try {
+                const data = await apiCall('/reports/inventory-value');
+                renderInventoryValueReport(data);
+            } catch (error) {
+                console.error('❌ Error cargando reporte de valor de inventario:', error);
+            }
+        }
+
+        // Product Management Functions - ACTUALIZADO
         async function toggleProductStatus(productId) {
             try {
                 const product = products.find(p => p.id == productId);
@@ -1036,13 +1373,13 @@
                 product.active = newStatus;
                 renderProducts();
 
-                // Enviar al servidor
+                // Enviar al servidor PostgreSQL
                 await apiCall(`/products/${productId}/status`, {
                     method: 'PATCH',
                     body: JSON.stringify({ active: newStatus })
                 });
 
-                console.log('✅ Estado actualizado');
+                console.log('✅ Estado actualizado en PostgreSQL');
                 
                 // Recargar estadísticas
                 loadStats();
@@ -1113,7 +1450,7 @@
 
         // Tab navigation
         function showTab(tabName) {
-            console.log(`🔄 Cambiando a: ${tabName}`);
+            console.log(`🔄 Cambiando a pestaña: ${tabName}`);
             
             document.querySelectorAll('.tab-pane').forEach(tab => 
                 tab.classList.remove('active'));
@@ -1122,15 +1459,20 @@
 
             document.getElementById(tabName).classList.add('active');
             event.target.classList.add('active');
+
+            // Cargar datos específicos de la pestaña
+            if (tabName === 'reports') {
+                loadReports();
+            }
         }
 
-        // Render Functions
+        // Render Functions - ACTUALIZADOS PARA POSTGRESQL
         function renderProducts() {
-            console.log('🎨 Renderizando productos...');
+            console.log('🎨 Renderizando productos desde PostgreSQL...');
             const tbody = document.getElementById('productsTable');
             
             if (!tbody) {
-                console.error('❌ Tabla no encontrada');
+                console.error('❌ Tabla de productos no encontrada');
                 return;
             }
             
@@ -1141,7 +1483,7 @@
                     <tr>
                         <td colspan="7" style="text-align: center; padding: 40px; color: #666;">
                             <i class="fas fa-box-open" style="font-size: 3rem; opacity: 0.3; margin-bottom: 10px; display: block;"></i>
-                            ${products.length === 0 ? 'No hay productos disponibles' : 'No se encontraron productos con los filtros aplicados'}
+                            ${products.length === 0 ? 'No hay productos en PostgreSQL' : 'No se encontraron productos con los filtros aplicados'}
                         </td>
                     </tr>
                 `;
@@ -1169,9 +1511,6 @@
                     // Estado del producto
                     const statusClass = product.active ? 'badge-active' : 'badge-inactive';
                     const statusText = product.active ? 'Activo' : 'Inactivo';
-                    const toggleClass = product.active ? 'active' : '';
-                    const toggleIcon = product.active ? 'fa-toggle-on' : 'fa-toggle-off';
-                    const toggleColor = product.active ? 'var(--success)' : 'var(--danger)';
                     
                     row.innerHTML = `
                         <td style="font-weight: 700; color: var(--primary);">${product.id}</td>
@@ -1220,7 +1559,7 @@
                 }
             });
             
-            console.log('✅ Productos renderizados');
+            console.log('✅ Productos renderizados desde PostgreSQL');
         }
 
         function renderProductsError() {
@@ -1230,7 +1569,7 @@
                     <tr>
                         <td colspan="7" style="text-align: center; padding: 40px; color: #dc2626;">
                             <i class="fas fa-exclamation-triangle" style="font-size: 2rem; margin-bottom: 10px; display: block;"></i>
-                            Error cargando productos
+                            Error cargando productos desde PostgreSQL
                             <br><br>
                             <button onclick="loadProducts()" class="btn btn-primary btn-sm">
                                 <i class="fas fa-redo"></i> Reintentar
@@ -1241,13 +1580,144 @@
             }
         }
 
+        function renderOrders() {
+            const tbody = document.getElementById('ordersTable');
+            if (!tbody) return;
+
+            tbody.innerHTML = '';
+
+            if (!orders || orders.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 40px; color: #666;">
+                            <i class="fas fa-shopping-cart" style="font-size: 3rem; opacity: 0.3; margin-bottom: 10px; display: block;"></i>
+                            No hay pedidos registrados
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            orders.forEach(order => {
+                const row = document.createElement('tr');
+                const total = new Intl.NumberFormat('es-DO', { 
+                    style: 'currency', 
+                    currency: 'DOP' 
+                }).format(order.total || 0);
+
+                const statusClass = order.status === 'completed' ? 'badge-success' : 
+                                  order.status === 'pending' ? 'badge-warning' : 'badge-secondary';
+
+                const date = new Date(order.created_at).toLocaleDateString('es-DO');
+
+                row.innerHTML = `
+                    <td style="font-weight: 700;">${order.id}</td>
+                    <td>${order.customer_name}</td>
+                    <td style="font-weight: 700; color: var(--primary);">${total}</td>
+                    <td><span class="badge ${statusClass}">${order.status}</span></td>
+                    <td>${date}</td>
+                `;
+
+                tbody.appendChild(row);
+            });
+        }
+
+        function renderOrdersError() {
+            const tbody = document.getElementById('ordersTable');
+            if (tbody) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 40px; color: #dc2626;">
+                            <i class="fas fa-exclamation-triangle" style="font-size: 2rem; margin-bottom: 10px; display: block;"></i>
+                            Error cargando pedidos
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        function renderLowStockReport(data) {
+            const tbody = document.getElementById('lowStockTable');
+            if (!tbody) return;
+
+            tbody.innerHTML = '';
+
+            if (!data || data.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="4" style="text-align: center; padding: 40px; color: #059669;">
+                            <i class="fas fa-check-circle" style="font-size: 3rem; opacity: 0.3; margin-bottom: 10px; display: block;"></i>
+                            No hay productos con bajo stock
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            data.forEach(item => {
+                const row = document.createElement('tr');
+                const statusClass = item.stock_status === 'SIN STOCK' ? 'badge-danger' :
+                                   item.stock_status === 'STOCK BAJO' ? 'badge-warning' : 'badge-secondary';
+
+                row.innerHTML = `
+                    <td style="font-weight: 600;">${item.product_name}</td>
+                    <td>${item.branch}</td>
+                    <td style="text-align: center; font-weight: 700;">${item.current_stock}</td>
+                    <td><span class="badge ${statusClass}">${item.stock_status}</span></td>
+                `;
+
+                tbody.appendChild(row);
+            });
+        }
+
+        function renderInventoryValueReport(data) {
+            const tbody = document.getElementById('inventoryValueTable');
+            if (!tbody) return;
+
+            tbody.innerHTML = '';
+
+            if (!data || data.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="5" style="text-align: center; padding: 40px; color: #666;">
+                            No hay datos de inventario
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            data.forEach(item => {
+                const row = document.createElement('tr');
+                const unitPrice = new Intl.NumberFormat('es-DO', { 
+                    style: 'currency', 
+                    currency: 'DOP' 
+                }).format(item.unit_price || 0);
+
+                const totalValue = new Intl.NumberFormat('es-DO', { 
+                    style: 'currency', 
+                    currency: 'DOP' 
+                }).format(item.total_value || 0);
+
+                row.innerHTML = `
+                    <td style="font-weight: 600;">${item.product_name}</td>
+                    <td>${item.category}</td>
+                    <td style="text-align: right; font-weight: 700;">${unitPrice}</td>
+                    <td style="text-align: center; font-weight: 700;">${item.total_stock}</td>
+                    <td style="text-align: right; font-weight: 700; color: var(--primary);">${totalValue}</td>
+                `;
+
+                tbody.appendChild(row);
+            });
+        }
+
         function updateStatsDisplay(stats) {
-            console.log('📊 Actualizando estadísticas:', stats);
+            console.log('📊 Actualizando estadísticas desde PostgreSQL:', stats);
             
             try {
-                const activeProductsCount = products.filter(p => p.active).length;
-                
+                // Productos
                 document.getElementById('totalProducts').textContent = stats.totalProducts || 0;
+                document.getElementById('activeProducts').textContent = stats.activeProducts || 0;
                 
                 const totalValue = new Intl.NumberFormat('es-DO', { 
                     style: 'currency', 
@@ -1255,9 +1725,12 @@
                 }).format(stats.totalValue || 0);
                 document.getElementById('totalValue').textContent = totalValue;
                 
-                document.getElementById('activeProducts').textContent = activeProductsCount;
+                document.getElementById('totalStock').textContent = stats.totalStock || 0;
                 
+                // Pedidos
                 document.getElementById('totalOrders').textContent = stats.totalOrders || 0;
+                document.getElementById('completedOrders').textContent = stats.completedOrders || 0;
+                document.getElementById('pendingOrders').textContent = stats.pendingOrders || 0;
                 
                 const totalSales = new Intl.NumberFormat('es-DO', { 
                     style: 'currency', 
@@ -1265,7 +1738,10 @@
                 }).format(stats.totalSales || 0);
                 document.getElementById('totalSales').textContent = totalSales;
                 
-                console.log('✅ Estadísticas actualizadas');
+                // Reportes
+                document.getElementById('categoriesCount').textContent = stats.categoriesCount || 0;
+                
+                console.log('✅ Estadísticas actualizadas desde PostgreSQL');
             } catch (error) {
                 console.error('❌ Error actualizando estadísticas:', error);
             }
@@ -1273,27 +1749,52 @@
 
         // Notification System
         function showNotification(message, type = 'info') {
+            console.log(`📢 Notificación [${type}]: ${message}`);
+            
+            // Remover notificaciones existentes
+            const existingNotifications = document.querySelectorAll('.notification');
+            existingNotifications.forEach(n => n.remove());
+
             const notification = document.createElement('div');
-            notification.className = `alert alert-${type}`;
+            notification.className = `notification alert alert-${type}`;
             notification.style.cssText = `
                 position: fixed;
                 top: 20px;
                 right: 20px;
                 z-index: 10000;
                 min-width: 300px;
+                max-width: 500px;
                 animation: slideInRight 0.3s ease;
+                box-shadow: 0 10px 25px rgba(0,0,0,0.1);
             `;
-            notification.textContent = message;
+            
+            const icon = type === 'success' ? 'check-circle' : 
+                        type === 'danger' ? 'exclamation-triangle' : 
+                        type === 'warning' ? 'exclamation-circle' : 'info-circle';
+            
+            notification.innerHTML = `
+                <i class="fas fa-${icon}"></i> ${message}
+            `;
             
             document.body.appendChild(notification);
             
             setTimeout(() => {
                 notification.style.animation = 'slideOutRight 0.3s ease';
                 setTimeout(() => {
-                    document.body.removeChild(notification);
+                    if (notification.parentNode) {
+                        notification.parentNode.removeChild(notification);
+                    }
                 }, 300);
-            }, 3000);
+            }, 4000);
         }
+
+        // Auto-refresh data every 30 seconds
+        setInterval(() => {
+            if (currentUser && !document.getElementById('mainApp').classList.contains('hidden')) {
+                console.log('🔄 Auto-refresh de datos...');
+                loadStats();
+            }
+        }, 30000);
 
         // Add CSS animations
         const style = document.createElement('style');
@@ -1306,7 +1807,53 @@
                 from { transform: translateX(0); opacity: 1; }
                 to { transform: translateX(100%); opacity: 0; }
             }
+            @keyframes fadeIn {
+                from { opacity: 0; transform: translateY(20px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+            .tab-pane.active {
+                animation: fadeIn 0.3s ease;
+            }
+            .card {
+                animation: fadeIn 0.5s ease;
+            }
+            .stat-card:nth-child(1) { animation-delay: 0.1s; }
+            .stat-card:nth-child(2) { animation-delay: 0.2s; }
+            .stat-card:nth-child(3) { animation-delay: 0.3s; }
+            .stat-card:nth-child(4) { animation-delay: 0.4s; }
         `;
         document.head.appendChild(style);
 
-        console.log('🎉 Sistema de Gestión mejorado listo!');
+        // Handle connection errors gracefully
+        window.addEventListener('online', () => {
+            console.log('🌐 Conexión restaurada');
+            updateConnectionStatus(true, 'Conexión restaurada');
+            if (currentUser) {
+                loadData();
+            }
+        });
+
+        window.addEventListener('offline', () => {
+            console.log('📵 Sin conexión a internet');
+            updateConnectionStatus(false, 'Sin conexión a internet');
+        });
+
+        // Handle page visibility changes
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && currentUser) {
+                console.log('👁️ Página visible, actualizando datos...');
+                checkAPIConnection();
+            }
+        });
+
+        console.log('🎉 Sistema de Gestión PostgreSQL v3.0 listo!');
+        console.log('🔧 Funcionalidades disponibles:');
+        console.log('   • Gestión de productos con PostgreSQL');
+        console.log('   • Control de inventario por sucursal');
+        console.log('   • Sistema de pedidos completo');
+        console.log('   • Reportes avanzados');
+        console.log('   • Auto-refresh cada 30 segundos');
+        console.log('   • Manejo robusto de errores');
+    </script>
+</body>
+</html>
