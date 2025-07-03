@@ -180,6 +180,21 @@
             font-size: 14px;
         }
 
+        .btn-success {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+            color: white;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #64748b, #475569);
+            color: white;
+        }
+
         /* Main App Styles */
         .app-container {
             background: rgba(255, 255, 255, 0.95);
@@ -361,6 +376,15 @@
             border-bottom: none;
         }
 
+        .table tr.inactive {
+            opacity: 0.6;
+            background: rgba(239, 68, 68, 0.05);
+        }
+
+        .table tr.inactive:hover {
+            background: rgba(239, 68, 68, 0.1);
+        }
+
         /* Stats Cards */
         .stats-grid {
             display: grid;
@@ -478,6 +502,182 @@
             background: linear-gradient(135deg, #ef4444, #dc2626);
             color: white;
         }
+
+        .badge-active {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+        }
+
+        .badge-inactive {
+            background: linear-gradient(135deg, #64748b, #475569);
+            color: white;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .search-box {
+            position: relative;
+            flex: 1;
+            max-width: 300px;
+        }
+
+        .search-box input {
+            width: 100%;
+            padding: 12px 16px 12px 44px;
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            font-size: 14px;
+            background: rgba(255, 255, 255, 0.9);
+            transition: all 0.3s ease;
+        }
+
+        .search-box input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.1);
+            outline: none;
+        }
+
+        .search-box i {
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-muted);
+        }
+
+        .filter-select {
+            padding: 12px 16px;
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            font-size: 14px;
+            background: rgba(255, 255, 255, 0.9);
+            color: var(--text);
+            cursor: pointer;
+            min-width: 150px;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 6px;
+        }
+
+        .btn-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            padding: 0;
+        }
+
+        .product-info {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .product-name {
+            font-weight: 700;
+            color: var(--accent);
+            font-size: 16px;
+        }
+
+        .product-description {
+            font-size: 13px;
+            color: var(--text-light);
+            font-weight: 500;
+            line-height: 1.4;
+        }
+
+        .stock-info {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .stock-total {
+            margin-bottom: 6px;
+        }
+
+        .stock-detail {
+            font-size: 11px;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .status-toggle {
+            position: relative;
+            width: 48px;
+            height: 24px;
+            background: var(--danger);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-right: 8px;
+        }
+
+        .status-toggle.active {
+            background: var(--success);
+        }
+
+        .status-toggle::after {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .status-toggle.active::after {
+            transform: translateX(24px);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+
+            .header {
+                padding: 20px;
+            }
+
+            .tab-content {
+                padding: 20px;
+            }
+
+            .controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .search-box {
+                max-width: none;
+            }
+
+            .table th,
+            .table td {
+                padding: 12px 8px;
+                font-size: 12px;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+            }
+        }
     </style>
 </head>
 <body>
@@ -548,11 +748,34 @@
                                 <p>Valor Inventario</p>
                             </div>
                         </div>
+                        <div class="stat-card">
+                            <div class="stat-icon">
+                                <i class="fas fa-toggle-on"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h3 id="activeProducts">0</h3>
+                                <p>Productos Activos</p>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="card">
                         <div class="card-header">
                             <h3>Productos por Sucursal</h3>
+                            <div class="controls">
+                                <div class="search-box">
+                                    <i class="fas fa-search"></i>
+                                    <input type="text" id="productSearch" placeholder="Buscar productos..." oninput="onProductSearch()">
+                                </div>
+                                <select id="statusFilter" class="filter-select" onchange="applyFilters()">
+                                    <option value="">Todos los estados</option>
+                                    <option value="active">Solo activos</option>
+                                    <option value="inactive">Solo inactivos</option>
+                                </select>
+                                <select id="categoryFilter" class="filter-select" onchange="applyFilters()">
+                                    <option value="">Todas las categorías</option>
+                                </select>
+                            </div>
                         </div>
                         <div class="card-body">
                             <div class="table-container">
@@ -564,6 +787,8 @@
                                             <th>Precio</th>
                                             <th>Stock por Sucursal</th>
                                             <th>Categoría</th>
+                                            <th>Estado</th>
+                                            <th>Acciones</th>
                                         </tr>
                                     </thead>
                                     <tbody id="productsTable">
@@ -617,6 +842,7 @@
         
         // Global variables
         let products = [];
+        let filteredProducts = [];
         let orders = [];
         let currentUser = null;
 
@@ -625,10 +851,8 @@
 
         // Initialize app
         document.addEventListener('DOMContentLoaded', function() {
-            // Test API connection
             testAPIConnection();
             
-            // Verificar si hay sesión activa
             const savedUser = localStorage.getItem('currentUser');
             if (savedUser) {
                 try {
@@ -697,7 +921,6 @@
                 return;
             }
 
-            // Mostrar estado de carga
             const submitButton = e.target.querySelector('button[type="submit"]');
             const originalText = submitButton.innerHTML;
             submitButton.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Conectando...';
@@ -711,7 +934,6 @@
 
                 console.log('📋 Login response:', data);
 
-                // Verificar respuesta exitosa
                 if (data && data.success === true && data.user) {
                     console.log('✅ Login exitoso!');
                     currentUser = data.user;
@@ -725,7 +947,6 @@
                 console.error('❌ Error en login:', error);
                 showError('Error de conexión con el servidor');
             } finally {
-                // Restaurar botón
                 submitButton.innerHTML = originalText;
                 submitButton.disabled = false;
             }
@@ -743,7 +964,6 @@
             currentUser = null;
             document.getElementById('loginScreen').classList.remove('hidden');
             document.getElementById('mainApp').classList.add('hidden');
-            // Limpiar formulario
             document.getElementById('username').value = 'admin';
             document.getElementById('password').value = 'admin123';
         }
@@ -776,7 +996,16 @@
                 console.log('📦 Cargando productos...');
                 const data = await apiCall('/products');
                 products = data || [];
+                
+                // Agregar estado activo por defecto si no existe
+                products = products.map(product => ({
+                    ...product,
+                    active: product.active !== undefined ? product.active : true
+                }));
+                
+                filteredProducts = [...products];
                 console.log(`✅ ${products.length} productos cargados`);
+                populateCategoryFilter();
                 renderProducts();
             } catch (error) {
                 console.error('❌ Error cargando productos:', error);
@@ -794,17 +1023,103 @@
             }
         }
 
+        // Product Management Functions
+        async function toggleProductStatus(productId) {
+            try {
+                const product = products.find(p => p.id == productId);
+                if (!product) return;
+
+                const newStatus = !product.active;
+                console.log(`🔄 Cambiando estado del producto ${productId} a: ${newStatus ? 'activo' : 'inactivo'}`);
+
+                // Actualizar localmente primero para UI responsiva
+                product.active = newStatus;
+                renderProducts();
+
+                // Enviar al servidor
+                await apiCall(`/products/${productId}/status`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ active: newStatus })
+                });
+
+                console.log('✅ Estado actualizado');
+                
+                // Recargar estadísticas
+                loadStats();
+                
+                // Mostrar notificación
+                showNotification(
+                    `Producto ${newStatus ? 'activado' : 'desactivado'} correctamente`,
+                    newStatus ? 'success' : 'warning'
+                );
+                
+            } catch (error) {
+                console.error('❌ Error actualizando estado:', error);
+                // Revertir cambio local
+                const product = products.find(p => p.id == productId);
+                if (product) {
+                    product.active = !product.active;
+                    renderProducts();
+                }
+                showNotification('Error al actualizar el estado del producto', 'danger');
+            }
+        }
+
+        // Search and Filter Functions
+        function onProductSearch() {
+            applyFilters();
+        }
+
+        function applyFilters() {
+            const searchTerm = document.getElementById('productSearch').value.toLowerCase();
+            const statusFilter = document.getElementById('statusFilter').value;
+            const categoryFilter = document.getElementById('categoryFilter').value;
+
+            filteredProducts = products.filter(product => {
+                // Filtro de búsqueda
+                const matchesSearch = !searchTerm || 
+                    product.name?.toLowerCase().includes(searchTerm) ||
+                    product.description?.toLowerCase().includes(searchTerm) ||
+                    product.category?.toLowerCase().includes(searchTerm);
+
+                // Filtro de estado
+                const matchesStatus = !statusFilter ||
+                    (statusFilter === 'active' && product.active) ||
+                    (statusFilter === 'inactive' && !product.active);
+
+                // Filtro de categoría
+                const matchesCategory = !categoryFilter || product.category === categoryFilter;
+
+                return matchesSearch && matchesStatus && matchesCategory;
+            });
+
+            renderProducts();
+        }
+
+        function populateCategoryFilter() {
+            const categorySelect = document.getElementById('categoryFilter');
+            const categories = [...new Set(products.map(p => p.category).filter(Boolean))];
+            
+            // Limpiar opciones existentes (excepto la primera)
+            categorySelect.innerHTML = '<option value="">Todas las categorías</option>';
+            
+            categories.forEach(category => {
+                const option = document.createElement('option');
+                option.value = category;
+                option.textContent = category;
+                categorySelect.appendChild(option);
+            });
+        }
+
         // Tab navigation
         function showTab(tabName) {
             console.log(`🔄 Cambiando a: ${tabName}`);
             
-            // Hide all tabs
             document.querySelectorAll('.tab-pane').forEach(tab => 
                 tab.classList.remove('active'));
             document.querySelectorAll('.nav-tab').forEach(tab => 
                 tab.classList.remove('active'));
 
-            // Show selected tab
             document.getElementById(tabName).classList.add('active');
             event.target.classList.add('active');
         }
@@ -821,21 +1136,24 @@
             
             tbody.innerHTML = '';
 
-            if (!products || products.length === 0) {
+            if (!filteredProducts || filteredProducts.length === 0) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="5" style="text-align: center; padding: 40px; color: #666;">
+                        <td colspan="7" style="text-align: center; padding: 40px; color: #666;">
                             <i class="fas fa-box-open" style="font-size: 3rem; opacity: 0.3; margin-bottom: 10px; display: block;"></i>
-                            No hay productos disponibles
+                            ${products.length === 0 ? 'No hay productos disponibles' : 'No se encontraron productos con los filtros aplicados'}
                         </td>
                     </tr>
                 `;
                 return;
             }
 
-            products.forEach(product => {
+            filteredProducts.forEach(product => {
                 try {
                     const row = document.createElement('tr');
+                    if (!product.active) {
+                        row.classList.add('inactive');
+                    }
                     
                     // Formatear precio
                     const price = new Intl.NumberFormat('es-DO', { 
@@ -848,25 +1166,51 @@
                     const stockClass = (product.stock || 0) > 10 ? 'badge-success' : 
                                      (product.stock || 0) > 0 ? 'badge-warning' : 'badge-danger';
                     
+                    // Estado del producto
+                    const statusClass = product.active ? 'badge-active' : 'badge-inactive';
+                    const statusText = product.active ? 'Activo' : 'Inactivo';
+                    const toggleClass = product.active ? 'active' : '';
+                    const toggleIcon = product.active ? 'fa-toggle-on' : 'fa-toggle-off';
+                    const toggleColor = product.active ? 'var(--success)' : 'var(--danger)';
+                    
                     row.innerHTML = `
                         <td style="font-weight: 700; color: var(--primary);">${product.id}</td>
                         <td>
-                            <div style="font-weight: 700; margin-bottom: 6px; color: var(--accent);">${product.name || 'Sin nombre'}</div>
-                            <div style="font-size: 13px; color: var(--text-light); font-weight: 500;">${product.description || ''}</div>
+                            <div class="product-info">
+                                <div class="product-name">${product.name || 'Sin nombre'}</div>
+                                <div class="product-description">${product.description || ''}</div>
+                            </div>
                         </td>
                         <td style="font-weight: 700; color: var(--primary); font-size: 16px;">${price}</td>
                         <td>
-                            <div class="badge ${stockClass}" style="margin-bottom: 6px; display: block;">
-                                Total: ${product.stock || 0}
-                            </div>
-                            <div style="font-size: 11px; color: var(--text-muted); font-weight: 500;">
-                                ${stockDisplay}
+                            <div class="stock-info">
+                                <div class="badge ${stockClass} stock-total">
+                                    Total: ${product.stock || 0}
+                                </div>
+                                <div class="stock-detail">
+                                    ${stockDisplay}
+                                </div>
                             </div>
                         </td>
                         <td>
                             <span style="background: var(--gradient); color: white; padding: 6px 12px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">
                                 ${product.category || 'Sin categoría'}
                             </span>
+                        </td>
+                        <td>
+                            <span class="badge ${statusClass}">
+                                ${statusText}
+                            </span>
+                        </td>
+                        <td>
+                            <div class="action-buttons">
+                                <button onclick="toggleProductStatus(${product.id})" 
+                                        class="btn btn-sm ${product.active ? 'btn-danger' : 'btn-success'}" 
+                                        title="${product.active ? 'Desactivar' : 'Activar'} producto">
+                                    <i class="fas ${product.active ? 'fa-pause' : 'fa-play'}"></i>
+                                    ${product.active ? 'Desactivar' : 'Activar'}
+                                </button>
+                            </div>
                         </td>
                     `;
                     
@@ -884,7 +1228,7 @@
             if (tbody) {
                 tbody.innerHTML = `
                     <tr>
-                        <td colspan="5" style="text-align: center; padding: 40px; color: #dc2626;">
+                        <td colspan="7" style="text-align: center; padding: 40px; color: #dc2626;">
                             <i class="fas fa-exclamation-triangle" style="font-size: 2rem; margin-bottom: 10px; display: block;"></i>
                             Error cargando productos
                             <br><br>
@@ -901,6 +1245,8 @@
             console.log('📊 Actualizando estadísticas:', stats);
             
             try {
+                const activeProductsCount = products.filter(p => p.active).length;
+                
                 document.getElementById('totalProducts').textContent = stats.totalProducts || 0;
                 
                 const totalValue = new Intl.NumberFormat('es-DO', { 
@@ -908,6 +1254,8 @@
                     currency: 'DOP' 
                 }).format(stats.totalValue || 0);
                 document.getElementById('totalValue').textContent = totalValue;
+                
+                document.getElementById('activeProducts').textContent = activeProductsCount;
                 
                 document.getElementById('totalOrders').textContent = stats.totalOrders || 0;
                 
@@ -923,7 +1271,42 @@
             }
         }
 
-        console.log('🎉 Sistema de Gestión listo!');
-    </script>
-</body>
-</html>
+        // Notification System
+        function showNotification(message, type = 'info') {
+            const notification = document.createElement('div');
+            notification.className = `alert alert-${type}`;
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                z-index: 10000;
+                min-width: 300px;
+                animation: slideInRight 0.3s ease;
+            `;
+            notification.textContent = message;
+            
+            document.body.appendChild(notification);
+            
+            setTimeout(() => {
+                notification.style.animation = 'slideOutRight 0.3s ease';
+                setTimeout(() => {
+                    document.body.removeChild(notification);
+                }, 300);
+            }, 3000);
+        }
+
+        // Add CSS animations
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideInRight {
+                from { transform: translateX(100%); opacity: 0; }
+                to { transform: translateX(0); opacity: 1; }
+            }
+            @keyframes slideOutRight {
+                from { transform: translateX(0); opacity: 1; }
+                to { transform: translateX(100%); opacity: 0; }
+            }
+        `;
+        document.head.appendChild(style);
+
+        console.log('🎉 Sistema de Gestión mejorado listo!');
